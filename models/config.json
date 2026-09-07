@@ -1,0 +1,11 @@
+{
+  "n_features": 33,
+  "n_stages": 6,
+  "hidden_dim": 64,
+  "num_layers": 2,
+  "context_len": 10,
+  "horizon_k": 5,
+  "window_seconds": 30,
+  "seed": 42,
+  "data": "../data/synthetic_flows.csv"
+}
