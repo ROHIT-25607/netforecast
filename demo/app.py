@@ -18,31 +18,48 @@ from features import build_state_sequence, STATE_FEATURE_NAMES  # noqa: E402
 from mitre_mapping import STAGES, MITRE_TACTIC  # noqa: E402
 from predict import InfiltrationPredictor  # noqa: E402
 
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
-SAMPLE_CSV = os.path.join(os.path.dirname(__file__), "..", "data", "synthetic_flows.csv")
+ROOT = os.path.join(os.path.dirname(__file__), "..")
+MODEL_CHOICES = {
+    "CIC-IDS2017 (real dataset)": {
+        "model_dir": os.path.join(ROOT, "models_real"),
+        "sample_csv": os.path.join(ROOT, "data", "cicids2017_processed.csv"),
+    },
+    "Synthetic demo dataset": {
+        "model_dir": os.path.join(ROOT, "models"),
+        "sample_csv": os.path.join(ROOT, "data", "synthetic_flows.csv"),
+    },
+}
 
 st.set_page_config(page_title="Network Attack Forecasting World Model", layout="wide")
 st.title("🛰️ AI World-Model for Network Attack Forecasting")
 st.caption("Learns P(S_t+1 | S_t) over network traffic state and forecasts attacker progression "
            "K steps ahead, mapped to MITRE ATT&CK stages. Runs fully offline.")
 
+with st.sidebar:
+    dataset_choice = st.selectbox("Trained model / dataset", list(MODEL_CHOICES.keys()))
+MODEL_DIR = MODEL_CHOICES[dataset_choice]["model_dir"]
+SAMPLE_CSV = MODEL_CHOICES[dataset_choice]["sample_csv"]
+
 
 @st.cache_resource
-def load_predictor():
-    return InfiltrationPredictor(MODEL_DIR)
+def load_predictor(model_dir):
+    return InfiltrationPredictor(model_dir)
 
 
-def check_model_ready():
+def check_model_ready(model_dir):
     required = ["world_model.pt", "config.json", "norm_stats.npz"]
-    return all(os.path.exists(os.path.join(MODEL_DIR, r)) for r in required)
+    return all(os.path.exists(os.path.join(model_dir, r)) for r in required)
 
 
-if not check_model_ready():
-    st.error("No trained model found in `models/`. Run:\n\n"
-              "```\npython src/simulate_traffic.py\npython src/train.py\npython src/baseline.py\npython src/evaluate.py\n```")
+if not check_model_ready(MODEL_DIR):
+    st.error(f"No trained model found in `{MODEL_DIR}`. Run:\n\n"
+              "```\npython src/simulate_traffic.py\npython src/train.py\npython src/baseline.py\npython src/evaluate.py\n```\n"
+              "or, for the real dataset:\n\n"
+              "```\npython src/real_data_adapter.py\npython src/train.py --data data/cicids2017_processed.csv "
+              "--window-seconds 200 --day-boundaries data/cicids2017_processed.day_boundaries.json --out-dir models_real\n```")
     st.stop()
 
-predictor = load_predictor()
+predictor = load_predictor(MODEL_DIR)
 window_seconds = predictor.cfg["window_seconds"]
 context_len = predictor.cfg["context_len"]
 

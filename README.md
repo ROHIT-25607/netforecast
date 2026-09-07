@@ -59,11 +59,15 @@ netforecast/
 │   ├── evaluate.py            # F1/precision/recall/FPR benchmark, world model vs baseline
 │   ├── predict.py             # K-step rollout + MITRE mapping + explainability
 │   ├── explain.py             # SHAP explainability for the baseline
+│   ├── real_data_adapter.py   # CIC-IDS2017 CSV -> pipeline schema adapter
 │   └── mitre_mapping.py       # attack-stage ↔ MITRE ATT&CK tactic mapping
-├── demo/app.py                # Streamlit offline demo UI
-├── data/                      # generated/uploaded flow CSVs
-├── models/                    # trained checkpoints, config, norm stats
-├── reports/benchmark.md       # generated benchmark report
+├── demo/app.py                # Streamlit offline demo UI (switch real/synthetic in sidebar)
+├── data/
+│   ├── raw/                   # place the 8 CIC-IDS2017 daily CSVs here (git-ignored, large)
+│   └── ...                    # generated/adapted flow CSVs (git-ignored, large)
+├── models/                    # checkpoint trained on synthetic data
+├── models_real/                # checkpoint trained on real CIC-IDS2017 data
+├── reports/                   # generated benchmark reports (synthetic + real)
 └── requirements.txt
 ```
 
@@ -124,25 +128,84 @@ app will show:
 The app never calls out to the network or any cloud API — inference is a
 local forward pass through the checkpoint in `models/`.
 
-## 6. Using a real dataset (CIC-IDS2018 / CTU-13 / CICIoT2023)
+## 6. Trained on the real CIC-IDS2017 dataset
 
-`src/features.py` expects the column schema documented in
-`simulate_traffic.COLUMNS`. To plug in a real CICFlowMeter export:
+The project ships a working adapter for **CIC-IDS2017** (the 8 daily
+CICFlowMeter CSVs — e.g. Kaggle "Network Intrusion dataset (CIC-IDS-2017)"
+by chethuhn), and a checkpoint trained on it lives in `models_real/`.
 
-1. Rename that dataset's columns to match (e.g. CIC-IDS2018's
-   `Flow Duration` → `duration`, `Tot Fwd Pkts` → `tot_fwd_pkts`,
-   `SYN Flag Cnt` → `syn_flag_cnt`, `TotLen Fwd Pkts` → `totlen_fwd_bytes`,
-   etc. — a 1:1 mapping for almost every field).
-2. Derive `label_stage` from the dataset's attack-timeline annotations
-   (CIC-IDS2018 publishes per-day attack windows/labels; map each label to
-   one of `Benign / Reconnaissance / Initial_Access / Lateral_Movement /
-   Command_And_Control / Exfiltration` per `mitre_mapping.STAGES`).
-3. For packet-level fields not present in a flow-only export (TTL
-   variance, retransmission count, fragmentation), parse the corresponding
-   PCAP with **Scapy** or **PyShark** and join on the flow 5-tuple + time
-   window; a short adapter script following the `_flow` builders in
-   `simulate_traffic.py` is the fastest way to do this.
-4. Run `train.py --data <your.csv>` — no other code changes needed.
+```bash
+# 1. Put the 8 daily CSVs (Monday-WorkingHours.pcap_ISCX.csv, ... ) in data/raw/
+
+# 2. Adapt them to the pipeline's schema + kill-chain label taxonomy
+python src/real_data_adapter.py --raw-dir data/raw \
+       --out data/cicids2017_processed.csv --window-flow-count 200
+# -> writes data/cicids2017_processed.csv
+#    and   data/cicids2017_processed.day_boundaries.json
+
+# 3. Train (note --window-seconds here means "flows per window", see below)
+python src/train.py --data data/cicids2017_processed.csv \
+       --window-seconds 200 \
+       --day-boundaries data/cicids2017_processed.day_boundaries.json \
+       --out-dir models_real --epochs 25
+
+# 4. Baseline + benchmark on the identical split
+python src/baseline.py --data data/cicids2017_processed.csv \
+       --model-dir models_real --window-seconds 200
+python -c "import sys; sys.path.insert(0,'src'); import evaluate; \
+  evaluate.main(model_dir='models_real', data_path='data/cicids2017_processed.csv', \
+                report_path='reports/benchmark_cicids2017.md')"
+```
+
+**Results** (`reports/benchmark_cicids2017.md`), on a chronologically
+held-out test split:
+
+| Model | Precision | Recall | F1 | False Positive Rate |
+|---|---|---|---|---|
+| Logistic Regression (baseline) | 0.313 | 0.780 | 0.447 | 0.828 |
+| **LSTM World Model** | **0.842** | 0.823 | **0.832** | **0.075** |
+
+The world model's F1 is nearly double the baseline's, with an order of
+magnitude fewer false positives — evidence that learning the traffic's
+temporal dynamics, not just its per-window features, is what drives
+reliable forecasting on real attack traffic. `demo/app.py`'s sidebar lets
+you switch between this real-data checkpoint and the synthetic one.
+
+### CIC-IDS2017 adapter — schema differences & how they were handled
+
+This particular CSV export (see `src/real_data_adapter.py` docstring for
+the full column mapping) does **not** include IP addresses, protocol,
+wall-clock timestamps, or packet-level fields (TTL, retransmissions,
+fragmentation) — only flow-level CICFlowMeter statistics and a `Label`
+column. The adapter therefore:
+
+- Uses row order (CICFlowMeter emits flows in completion order) as a
+  chronology proxy, windowing by a fixed **flow count** (200) instead of
+  wall-clock seconds — pass this value as `--window-seconds` downstream.
+- Zero-fills the missing packet-level and IP-dependent features (they
+  carry no signal here, but the model still learns from all flow-level
+  dynamics: byte/packet counts, TCP flags, IAT statistics, ports).
+- Maps `Label` values onto the 5 kill-chain stages the problem statement
+  asks for: `PortScan`→Reconnaissance, `FTP/SSH-Patator`+`Web Attack *`+
+  `Heartbleed`→Initial_Access, `Bot`→Command_And_Control,
+  `Infiltration`→Lateral_Movement. **DoS/DDoS rows are dropped** (MITRE
+  "Impact", not one of the 5 requested stages). CIC-IDS2017 has **no
+  Exfiltration-labelled traffic**, so the model sees zero training
+  examples for that stage on this dataset — a real dataset limitation,
+  stated here rather than hidden.
+- Splits train/val/test **within each day** and unions them
+  (`dataset.day_aware_split`), because CIC-IDS2017 dedicates each day to
+  one attack family — a single global chronological cut would put entire
+  attack types (e.g. all Friday PortScan traffic) only in the test split
+  with zero training exposure.
+
+To plug in a different real dataset (CIC-IDS2018, CTU-13, CICIoT2023)
+instead, write a similar small adapter following
+`real_data_adapter.py`/`simulate_traffic.COLUMNS` as a template: rename
+that dataset's columns to the schema in `simulate_traffic.COLUMNS`, derive
+`label_stage` from its attack-timeline annotations, and (if it includes
+PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
+5-tuple + time window.
 
 ## 7. Why a World Model instead of a classifier?
 
@@ -178,11 +241,13 @@ was a hard requirement in the problem statement.
 
 ## 9. Limitations / honesty notes
 
-- Training data is a **synthetic generator** (see §6) built to match the
-  CIC-IDS2018 flow schema and known kill-chain signatures, because the
-  real multi-GB datasets could not be fetched inside this environment.
-  The pipeline, model and demo are dataset-agnostic and load a real
-  export unchanged once columns are mapped (§6).
+- The primary trained checkpoint (`models_real/`) is trained on the real
+  **CIC-IDS2017** dataset (§6). A second checkpoint (`models/`) trained on
+  a synthetic generator is also included, mainly as a controlled testbed
+  during development (it covers Exfiltration, which CIC-IDS2017 lacks)
+  and as a template for adapting a different real dataset. See §6 for the
+  CIC-IDS2017-specific schema gaps (no IPs/timestamps/packet-level fields)
+  and how the adapter handles each.
 - The "network state" here is a single aggregated vector for the whole
   monitored segment per time window. A natural extension (noted in
   `ARCHITECTURE.md`) is a per-host graph state with a GNN encoder for

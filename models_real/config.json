@@ -1,0 +1,12 @@
+{
+  "n_features": 33,
+  "n_stages": 6,
+  "hidden_dim": 64,
+  "num_layers": 2,
+  "context_len": 10,
+  "horizon_k": 5,
+  "window_seconds": 200,
+  "seed": 42,
+  "data": "../data/cicids2017_processed.csv",
+  "day_boundaries": "../data/cicids2017_processed.day_boundaries.json"
+}

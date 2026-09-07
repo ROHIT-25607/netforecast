@@ -16,7 +16,8 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from dataset import NetworkStateSequenceDataset, chronological_split, CONTEXT_LEN, HORIZON_K
+from dataset import (NetworkStateSequenceDataset, chronological_split, day_aware_split,
+                      CONTEXT_LEN, HORIZON_K)
 from features import build_state_sequence, normalize_states, N_FEATURES
 from mitre_mapping import STAGES
 from world_model import WorldModel
@@ -70,6 +71,12 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--hidden-dim", type=int, default=64)
     ap.add_argument("--num-layers", type=int, default=2)
+    ap.add_argument("--day-boundaries", default=None,
+                     help="Path to a *.day_boundaries.json written by real_data_adapter.py. "
+                          "When given, train/val/test is split chronologically WITHIN each day "
+                          "and unioned, instead of one 70/15/15 cut across the whole file -- "
+                          "needed when different days contain different attack families "
+                          "(see dataset.day_aware_split).")
     args = ap.parse_args()
 
     set_seed()
@@ -81,23 +88,34 @@ def main():
     states, label_ids, timestamps, _ = build_state_sequence(df, args.window_seconds)
     print(f"Built {len(states)} time windows of {states.shape[1]} features each.")
 
-    tr_sl, va_sl, te_sl = chronological_split(len(states))
+    if args.day_boundaries:
+        with open(args.day_boundaries) as f:
+            day_info = json.load(f)
+        train_windows, val_windows, test_windows = day_aware_split(
+            day_info["row_counts_per_day"], args.window_seconds)
+        print(f"Day-aware split from {args.day_boundaries}")
+    else:
+        tr_sl, va_sl, te_sl = chronological_split(len(states))
+        train_windows = list(range(tr_sl.start or 0, tr_sl.stop))
+        val_windows = list(range(va_sl.start, va_sl.stop))
+        test_windows = list(range(te_sl.start, te_sl.stop))
+
     # Normalize using statistics from the train split only, to avoid leakage.
-    train_states_raw = states[tr_sl]
+    train_states_raw = states[train_windows]
     mean = train_states_raw.mean(axis=0)
     std = train_states_raw.std(axis=0) + 1e-6
     states_norm = (states - mean) / std
 
     full_ds = NetworkStateSequenceDataset(states_norm, label_ids, args.context_len, args.horizon_k)
 
-    def indices_for_slice(sl):
-        lo = sl.start if sl.start is not None else 0
-        hi = sl.stop if sl.stop is not None else len(states)
-        return [i for i, t in enumerate(full_ds.valid_t) if lo <= t < hi]
+    train_set, val_set, test_set = set(train_windows), set(val_windows), set(test_windows)
 
-    train_idx = indices_for_slice(tr_sl)
-    val_idx = indices_for_slice(va_sl)
-    test_idx = indices_for_slice(te_sl)
+    def indices_for_windows(window_set):
+        return [i for i, t in enumerate(full_ds.valid_t) if t in window_set]
+
+    train_idx = indices_for_windows(train_set)
+    val_idx = indices_for_windows(val_set)
+    test_idx = indices_for_windows(test_set)
     print(f"Sequence examples -> train:{len(train_idx)} val:{len(val_idx)} test:{len(test_idx)}")
 
     train_loader = DataLoader(Subset(full_ds, train_idx), batch_size=args.batch_size, shuffle=True)
@@ -129,6 +147,7 @@ def main():
         "window_seconds": args.window_seconds,
         "seed": SEED,
         "data": args.data,
+        "day_boundaries": args.day_boundaries,
     }
     with open(os.path.join(args.out_dir, "config.json"), "w") as f:
         json.dump(config, f, indent=2)

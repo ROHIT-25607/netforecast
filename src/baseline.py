@@ -14,7 +14,8 @@ import pandas as pd
 import joblib
 from sklearn.linear_model import LogisticRegression
 
-from dataset import NetworkStateSequenceDataset, chronological_split, CONTEXT_LEN, HORIZON_K
+from dataset import (NetworkStateSequenceDataset, chronological_split, day_aware_split,
+                      CONTEXT_LEN, HORIZON_K)
 from features import build_state_sequence, N_FEATURES
 
 
@@ -39,9 +40,17 @@ def main():
     df = pd.read_csv(args.data)
     states, label_ids, _, _ = build_state_sequence(df, args.window_seconds)
 
-    tr_sl, va_sl, te_sl = chronological_split(len(states))
-    mean = states[tr_sl].mean(axis=0)
-    std = states[tr_sl].std(axis=0) + 1e-6
+    with open(os.path.join(args.model_dir, "config.json")) as f:
+        cfg = json.load(f)
+    if cfg.get("day_boundaries"):
+        with open(cfg["day_boundaries"]) as f:
+            day_info = json.load(f)
+        train_windows, _, _ = day_aware_split(day_info["row_counts_per_day"], args.window_seconds)
+    else:
+        tr_sl, _, _ = chronological_split(len(states))
+        train_windows = list(range(tr_sl.start or 0, tr_sl.stop))
+    mean = states[train_windows].mean(axis=0)
+    std = states[train_windows].std(axis=0) + 1e-6
     states_norm = (states - mean) / std
 
     split = np.load(os.path.join(args.model_dir, "split_indices.npz"))

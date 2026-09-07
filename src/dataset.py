@@ -54,3 +54,40 @@ def chronological_split(n, train_frac=0.7, val_frac=0.15):
     n_train = int(n * train_frac)
     n_val = int(n * val_frac)
     return slice(0, n_train), slice(n_train, n_train + n_val), slice(n_train + n_val, n)
+
+
+def day_aware_split(day_row_counts, window_flow_count, train_frac=0.7, val_frac=0.15):
+    """Chronological 70/15/15 split applied *within each day* rather than
+    once across the whole concatenated sequence, then unioned.
+
+    Needed for datasets (e.g. CIC-IDS2017) where each calendar day is a
+    dedicated, largely single-attack-family capture: a single global cut
+    would put an entire attack type exclusively in whichever split covers
+    that day (usually the test split), giving the model zero training
+    exposure to it. Splitting inside each day's own window range instead
+    guarantees every attack family present in the data appears in train,
+    val AND test, while each day's windows are still used in strict
+    forward-time order (no shuffling within a day).
+
+    `day_row_counts`: per-day flow-row counts, in concatenation order
+    (as written by real_data_adapter.py's *.day_boundaries.json).
+    `window_flow_count`: flows per window (matches --window-seconds used
+    to build the state sequence for this dataset).
+
+    Returns three sorted lists of *global* window indices.
+    """
+    train_idx, val_idx, test_idx = [], [], []
+    cursor = 0
+    for n_rows in day_row_counts:
+        n_windows = n_rows // window_flow_count
+        if n_windows == 0:
+            cursor += n_windows
+            continue
+        n_train = int(n_windows * train_frac)
+        n_val = int(n_windows * val_frac)
+        day_windows = list(range(cursor, cursor + n_windows))
+        train_idx.extend(day_windows[:n_train])
+        val_idx.extend(day_windows[n_train:n_train + n_val])
+        test_idx.extend(day_windows[n_train + n_val:])
+        cursor += n_windows
+    return sorted(train_idx), sorted(val_idx), sorted(test_idx)
