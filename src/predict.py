@@ -55,9 +55,11 @@ class InfiltrationPredictor:
         top = [(STATE_FEATURE_NAMES[i], float(per_feature[i])) for i in order[:8]]
         return top
 
-    def rollout(self, context_states_norm: np.ndarray, k: int = None):
+    def rollout(self, context_states_norm: np.ndarray, k: int = None, explain: bool = True):
         """context_states_norm: (L, F) normalized states, most recent last.
-        Returns a dict with per-step forecast + explainability artifacts.
+        Returns a dict with per-step forecast (+ explainability artifacts
+        unless explain=False, which skips the gradient/saliency pass --
+        use that for cheap repeated calls, e.g. scanning a whole timeline).
         """
         k = k or self.cfg["horizon_k"]
         L = self.cfg["context_len"]
@@ -67,7 +69,7 @@ class InfiltrationPredictor:
             x = torch.tensor(np.concatenate([pad, x.numpy()], axis=0), dtype=torch.float32)
 
         attention_first = None
-        saliency_first = self._saliency(x)
+        saliency_first = self._saliency(x) if explain else []
 
         steps = []
         cur = x
