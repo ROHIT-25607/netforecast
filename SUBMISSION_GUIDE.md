@@ -14,7 +14,7 @@ Checklist before sharing this repository link, following the standard
 - [x] Setup and run instructions work.
 - [ ] Team members and roles are mentioned.
 - [ ] Important screenshots are added to `assets/screenshots/`.
-- [ ] Final PPT/presentation is placed in `submission/` (or an external
+- [x] Final PPT/presentation is placed in `submission/` (or an external
       link is added to `submission/PRESENTATION.md`).
 - [ ] Demo video link is added to `submission/DEMO.md` (optional).
 - [ ] Repository is accessible to reviewers.

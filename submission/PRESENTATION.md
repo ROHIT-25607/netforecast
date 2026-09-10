@@ -1,8 +1,24 @@
-# Technical Presentation — NetForecast (5 slides)
-*Paste each `##` section into one slide.*
+# Project Presentation
 
-## Slide 1 — Problem & Approach
-**AI-based Network Attack Forecasting from Network Traffic Data (SIH 26153, NTRO)**
+**PPT:** [Open Final Presentation](./NetForecast_SIH2026_Presentation.pptx)
+
+7 slides: Title → Problem & Approach → Architecture → Key Features &
+Tech Stack → Results & Impact → Explainability & MITRE ATT&CK Mapping →
+Future Scope.
+
+## External presentation link (only if needed)
+
+Not required — the PPTX above is small enough to keep in the repository.
+
+---
+
+## Slide-by-slide notes (for narration)
+
+## Slide 1 — Title
+NetForecast — AI World Model for Network Attack Forecasting.
+SIH26153, National Technical Research Organisation (NTRO).
+
+## Slide 2 — Problem & Approach
 - Static flow classifiers score each packet/flow in isolation — they miss the
   *sequence* of an infiltration (scan → exploit → pivot → beacon → exfil).
 - **NetForecast** learns a **World Model**: the transition dynamics
@@ -11,29 +27,27 @@
 - Fully offline, open-source prototype: feature pipeline → LSTM world model
   → K-step forecaster → MITRE ATT&CK mapping → Streamlit UI.
 
-## Slide 2 — State Representation & Data
-- Network state `S_t`: 33-feature vector per 30s window, combining
-  **flow-level** (5-tuple, TCP flags, byte/pkt counts, IAT) and
-  **packet-level** (TTL variance, window size, retransmissions,
-  fragmentation) statistics, plus engineered kill-chain signatures
-  (scan ratio, half-open ratio, beacon regularity, admin-port ratio).
-- Trained on a labelled flow-record dataset built to the CIC-IDS2018
-  schema, with injected full kill-chain campaigns (Reconnaissance →
-  Initial Access → Lateral Movement → C2 → Exfiltration) interleaved with
-  benign background traffic — pipeline is dataset-agnostic and accepts a
-  real CIC-IDS2018 / CTU-13 export via a column-mapping adapter.
+## Slide 3 — System Architecture
+- Flow records → feature extraction (windowed 33-feature state `S_t`,
+  flow-level + packet-level + engineered kill-chain signatures) → LSTM
+  world model (encoder + attention) → prediction engine (K-step rollout)
+  → analyst dashboard.
+- Every prediction carries a MITRE ATT&CK stage and an explanation.
 
-## Slide 3 — World Model Architecture
-- Linear encoder → 2-layer LSTM → **additive attention** over the last
-  L=10 windows → 3 heads sharing one recurrent context:
-  1. **Next-state** (regression, MSE) — the actual dynamics-learning signal
-  2. **Attack-stage** classification (6-way, cross-entropy)
-  3. **Infiltration probability** (binary, K-step horizon, BCE)
-- **K-step rollout**: model's own predicted next state is fed back as
-  input for K steps → a full infiltration-probability *trajectory*, not a
-  single score.
+## Slide 4 — Key Features & Technology Stack
+- Multi-task world model (dynamics + stage + infiltration heads),
+  K-step forecasting, built-in explainability, offline demo,
+  baseline-benchmarked.
+- Stack: PyTorch, scikit-learn, SHAP, pandas/NumPy, Streamlit, Python.
 
-## Slide 4 — Explainability & MITRE ATT&CK Mapping
+## Slide 5 — Results & Impact
+- Benchmarked against a logistic-regression baseline on the **identical**
+  context window, horizon and chronologically-held-out (future) test
+  split on real CIC-IDS2017 traffic — see `reports/benchmark_cicids2017.md`.
+- World model: F1 0.832 vs baseline 0.447, FPR 0.075 vs 0.828 — nearly
+  double the F1 with an order of magnitude fewer false positives.
+
+## Slide 6 — Explainability & MITRE ATT&CK Mapping
 - Every prediction carries **attention weights** (which recent time
   windows mattered) + **gradient×input saliency** (which traffic
   features — SYN rate, scan ratio, beacon regularity, TTL variance —
@@ -42,12 +56,8 @@
   (TA0043 Reconnaissance, TA0001 Initial Access, TA0008 Lateral Movement,
   TA0011 C2, TA0010 Exfiltration) for direct SOC/analyst consumption.
 
-## Slide 5 — Results & Impact
-- Benchmarked against a logistic-regression baseline on the **identical**
-  context window, horizon and chronologically-held-out (future) test
-  split — see `reports/benchmark.md` for exact figures.
-- World model shows measurable F1/recall improvement, evidencing that
-  learned temporal dynamics — not just more features — drive the gain.
-- Applicable to enterprise SOC and Critical Information Infrastructure
-  monitoring: offline deployment, no cloud dependency, interpretable
-  output an analyst can act on before the kill chain completes.
+## Slide 7 — Future Scope
+- Graph-based per-host state with a GNN encoder for larger topologies.
+- Streaming ingest (Kafka/NetFlow) for real-time deployment.
+- Additional dataset adapters (CIC-IDS2018, CTU-13, CICIoT2023).
+- Direct SIEM/SOAR integration for analyst alerting.
