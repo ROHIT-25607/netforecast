@@ -155,27 +155,11 @@ train/val/test split indices are cached in `models/split_indices.npz` so
 `baseline.py` and `evaluate.py` compare against the *same* held-out,
 future-in-time windows the world model never trained on.
 
-## 9. Run the offline demo
+## 9. Demo Video
 
-```bash
-streamlit run demo/app.py
-```
+[Watch on Google Drive](https://drive.google.com/drive/folders/14LbfeSOyGeUZZ3lBmPQWUZCFh_gERLxc?usp=sharing)
 
-Upload a flow-record CSV (or leave blank to use the bundled sample) and the
-app will show:
-
-1. Traffic overview (flow count, window count).
-2. A rolling 1-step-ahead infiltration-probability timeline across the
-   whole file.
-3. A K-step forward simulation from the *current* (most recent) state:
-   per-step infiltration probability + predicted MITRE ATT&CK stage.
-4. Attention weights over the recent context window (explainability).
-5. Top driving traffic features for the current risk score (gradient×input
-   saliency).
-6. The raw flows in the most recent time window, for analyst drill-down.
-
-The app never calls out to the network or any cloud API — inference is a
-local forward pass through the checkpoint in `models/`.
+See [submission/DEMO.md](submission/DEMO.md) for the accompanying script.
 
 ## 10. Screenshots
 
@@ -198,7 +182,29 @@ More screenshots (live replay, K-step rollout, attention weights,
 flagged flows, MITRE stage reference) are in
 [assets/screenshots/](assets/screenshots/).
 
-## 11. Trained on the real CIC-IDS2017 dataset
+## 11. Run the offline demo
+
+```bash
+streamlit run demo/app.py
+```
+
+Upload a flow-record CSV (or leave blank to use the bundled sample) and the
+app will show:
+
+1. Traffic overview (flow count, window count).
+2. A rolling 1-step-ahead infiltration-probability timeline across the
+   whole file.
+3. A K-step forward simulation from the *current* (most recent) state:
+   per-step infiltration probability + predicted MITRE ATT&CK stage.
+4. Attention weights over the recent context window (explainability).
+5. Top driving traffic features for the current risk score (gradient×input
+   saliency).
+6. The raw flows in the most recent time window, for analyst drill-down.
+
+The app never calls out to the network or any cloud API — inference is a
+local forward pass through the checkpoint in `models/`.
+
+## 12. Trained on the real CIC-IDS2017 dataset
 
 The project ships a working adapter for **CIC-IDS2017** (the 8 daily
 CICFlowMeter CSVs — e.g. Kaggle "Network Intrusion dataset (CIC-IDS-2017)"
@@ -277,7 +283,7 @@ that dataset's columns to the schema in `simulate_traffic.COLUMNS`, derive
 PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
 5-tuple + time window.
 
-## 12. Why a World Model instead of a classifier?
+## 13. Why a World Model instead of a classifier?
 
 A per-flow classifier scores each flow independently and cannot express
 "the last 10 minutes of scanning + this new SMB connection means lateral
@@ -295,7 +301,7 @@ movement is imminent." NetForecast instead:
   logistic-regression baseline given the identical context window and
   forecast horizon.
 
-## 13. Explainability
+## 14. Explainability
 
 - **Attention weights** (`world_model.AdditiveAttention`) show which of
   the last L observed time windows the model weighted most heavily.
@@ -309,13 +315,13 @@ movement is imminent." NetForecast instead:
 No prediction is surfaced without at least one of these attached — this
 was a hard requirement in the problem statement.
 
-## 14. Limitations / honesty notes
+## 15. Limitations / honesty notes
 
 - The primary trained checkpoint (`models_real/`) is trained on the real
-  **CIC-IDS2017** dataset (§11). A second checkpoint (`models/`) trained on
+  **CIC-IDS2017** dataset (§12). A second checkpoint (`models/`) trained on
   a synthetic generator is also included, mainly as a controlled testbed
   during development (it covers Exfiltration, which CIC-IDS2017 lacks)
-  and as a template for adapting a different real dataset. See §11 for the
+  and as a template for adapting a different real dataset. See §12 for the
   CIC-IDS2017-specific schema gaps (no IPs/timestamps/packet-level fields)
   and how the adapter handles each.
 - The "network state" here is a single aggregated vector for the whole
@@ -327,7 +333,7 @@ was a hard requirement in the problem statement.
   the trained horizon K to keep this honest rather than cherry-picking
   short horizons.
 
-## 15. Future Scope
+## 16. Future Scope
 
 - Per-host graph state with a GNN encoder for larger enterprise topologies
   (see [docs/architecture.md](docs/architecture.md) §7).
