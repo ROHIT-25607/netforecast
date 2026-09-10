@@ -312,9 +312,3 @@ was a hard requirement in the problem statement.
   (see [docs/architecture.md](docs/architecture.md) §7).
 - Streaming ingest (Kafka/NetFlow collector feed) instead of CSV batch files.
 - Adapters for additional real-world datasets (CIC-IDS2018, CTU-13, CICIoT2023).
-
-## Important
-
-Before submission, make sure the repository is accessible to reviewers.
-Do **not** upload passwords, API keys, access tokens, `.env` files
-containing secrets, or other confidential credentials.
