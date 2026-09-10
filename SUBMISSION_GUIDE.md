@@ -13,7 +13,7 @@ Checklist before sharing this repository link, following the standard
 - [x] Technology stack is listed.
 - [x] Setup and run instructions work.
 - [ ] Team members and roles are mentioned.
-- [ ] Important screenshots are added to `assets/screenshots/`.
+- [x] Important screenshots are added to `assets/screenshots/`.
 - [x] Final PPT/presentation is placed in `submission/` (or an external
       link is added to `submission/PRESENTATION.md`).
 - [ ] Demo video link is added to `submission/DEMO.md` (optional).
