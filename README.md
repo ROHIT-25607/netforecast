@@ -306,36 +306,7 @@ was a hard requirement in the problem statement.
   the trained horizon K to keep this honest rather than cherry-picking
   short horizons.
 
-## 14. Final Presentation
-
-See [submission/PRESENTATION.md](submission/PRESENTATION.md) for the
-5-slide technical presentation.
-
-## 15. Demo Video
-
-See [submission/DEMO.md](submission/DEMO.md) for the 2-minute demo script
-and video link (optional).
-
-## 16. Screenshots
-
-See [assets/screenshots/](assets/screenshots/) for demo screenshots and
-naming convention.
-
-## 17. Installation
-
-```bash
-git clone https://github.com/ROHIT-25607/netforecast.git
-cd netforecast
-pip install -r requirements.txt
-```
-
-## 18. Run
-
-```bash
-streamlit run demo/app.py
-```
-
-## 19. Future Scope
+## 14. Future Scope
 
 - Per-host graph state with a GNN encoder for larger enterprise topologies
   (see [docs/architecture.md](docs/architecture.md) §7).
