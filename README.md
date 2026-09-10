@@ -182,8 +182,8 @@ local forward pass through the checkpoint in `models/`.
 ### Traffic overview
 ![Traffic overview](assets/screenshots/01-overview.png)
 
-### Infiltration probability timeline
-![Infiltration probability timeline](assets/screenshots/02-timeline.png)
+### Live Replay Simulation
+![Live Replay Simulation](assets/screenshots/03-live-replay-gauge.png)
 
 ### Explainability — top driving features
 ![Explainability — top driving features](assets/screenshots/07-saliency.png)
