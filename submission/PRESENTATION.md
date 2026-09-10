@@ -2,13 +2,12 @@
 
 **PPT:** [Open Final Presentation](./NetForecast_SIH2026_Presentation.pptx)
 
-7 slides: Title → Problem & Approach → Architecture → Key Features &
-Tech Stack → Results & Impact → Explainability & MITRE ATT&CK Mapping →
+**Google Slides:** [View / Present](https://docs.google.com/presentation/d/19jCtfTlM789KAU1H4Gnc4WW3YucuD-b_/edit?usp=sharing&ouid=110188210868834090212&rtpof=true&sd=true)
+
+9 slides: Title → Reactive vs Proactive → State Representation →
+World Model Architecture → K-Step Rollout & Kill-Chain Mapping →
+Explainability → Results & Impact → Key Features & Tech Stack →
 Future Scope.
-
-## External presentation link (only if needed)
-
-Not required — the PPTX above is small enough to keep in the repository.
 
 ---
 
@@ -18,45 +17,47 @@ Not required — the PPTX above is small enough to keep in the repository.
 NetForecast — AI World Model for Network Attack Forecasting.
 SIH26153, National Technical Research Organisation (NTRO).
 
-## Slide 2 — Problem & Approach
-- Static flow classifiers score each packet/flow in isolation — they miss the
-  *sequence* of an infiltration (scan → exploit → pivot → beacon → exfil).
-- **NetForecast** learns a **World Model**: the transition dynamics
-  `P(S_t+1 | S_t)` of the network's own state, then simulates forward to
-  catch attacker progression *before* compromise completes.
-- Fully offline, open-source prototype: feature pipeline → LSTM world model
-  → K-step forecaster → MITRE ATT&CK mapping → Streamlit UI.
+## Slide 2 — Reactive vs Proactive
+- Traditional IDS: inspects isolated packets, alerts *after* breach.
+- NetForecast: learns traffic dynamics over time, predicts an attack
+  *before* compromise — past → present → future forecast.
 
-## Slide 3 — System Architecture
-- Flow records → feature extraction (windowed 33-feature state `S_t`,
-  flow-level + packet-level + engineered kill-chain signatures) → LSTM
-  world model (encoder + attention) → prediction engine (K-step rollout)
-  → analyst dashboard.
-- Every prediction carries a MITRE ATT&CK stage and an explanation.
+## Slide 3 — State Representation
+- Every 30 seconds of traffic is aggregated into one fixed-length state
+  vector: flow-level features + packet-level features merge into
+  kill-chain signatures, producing `S_t ∈ R^33` per window.
 
-## Slide 4 — Key Features & Technology Stack
-- Multi-task world model (dynamics + stage + infiltration heads),
-  K-step forecasting, built-in explainability, offline demo,
-  baseline-benchmarked.
-- Stack: PyTorch, scikit-learn, SHAP, pandas/NumPy, Streamlit, Python.
+## Slide 4 — World Model Architecture
+- Last 10 network snapshots → Encoder → LSTM Memory → Attention →
+  3 prediction heads sharing one recurrent context: next-state (MSE),
+  attack-stage (cross-entropy), infiltration probability (BCE).
 
-## Slide 5 — Results & Impact
+## Slide 5 — K-Step Rollout & Kill-Chain Mapping
+- The model simulates future network states t+1 … t+5, each prediction
+  fed back as input — infiltration probability rises as the trajectory
+  approaches the predicted MITRE ATT&CK kill-chain stage (Reconnaissance
+  → Initial Access → Lateral Movement → C2 → Exfiltration).
+
+## Slide 6 — Explainability
+- **Attention weights** — which of the last observed time windows
+  drove the forecast (e.g. "port scan detected here").
+- **Feature saliency** — which specific traffic signals (scan ratio,
+  SYN rate, beacon regularity, TTL variance) triggered the warning.
+
+## Slide 7 — Results & Impact
 - Benchmarked against a logistic-regression baseline on the **identical**
   context window, horizon and chronologically-held-out (future) test
   split on real CIC-IDS2017 traffic — see `reports/benchmark_cicids2017.md`.
 - World model: F1 0.832 vs baseline 0.447, FPR 0.075 vs 0.828 — nearly
   double the F1 with an order of magnitude fewer false positives.
 
-## Slide 6 — Explainability & MITRE ATT&CK Mapping
-- Every prediction carries **attention weights** (which recent time
-  windows mattered) + **gradient×input saliency** (which traffic
-  features — SYN rate, scan ratio, beacon regularity, TTL variance —
-  drove the score). SHAP cross-checks the baseline.
-- Predicted stage is mapped to its MITRE ATT&CK Enterprise tactic ID
-  (TA0043 Reconnaissance, TA0001 Initial Access, TA0008 Lateral Movement,
-  TA0011 C2, TA0010 Exfiltration) for direct SOC/analyst consumption.
+## Slide 8 — Key Features & Technology Stack
+- Multi-task world model (dynamics + stage + infiltration heads),
+  K-step forecasting, built-in explainability, offline demo,
+  baseline-benchmarked.
+- Stack: PyTorch, scikit-learn, SHAP, pandas/NumPy, Streamlit, Python.
 
-## Slide 7 — Future Scope
+## Slide 9 — Future Scope
 - Graph-based per-host state with a GNN encoder for larger topologies.
 - Streaming ingest (Kafka/NetFlow) for real-time deployment.
 - Additional dataset adapters (CIC-IDS2018, CTU-13, CICIoT2023).
