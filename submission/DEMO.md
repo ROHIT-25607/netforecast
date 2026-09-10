@@ -1,4 +1,10 @@
-# 2-Minute Demo Video Script
+# Demo Video
+
+## Demo video link
+
+[Watch on Google Drive](https://drive.google.com/drive/folders/14LbfeSOyGeUZZ3lBmPQWUZCFh_gERLxc?usp=sharing)
+
+## 2-Minute Demo Video Script
 
 **Setup before recording:** run the reproduce steps in README §4, then
 `streamlit run demo/app.py`.
