@@ -159,7 +159,7 @@ future-in-time windows the world model never trained on.
 
 [Watch on Google Drive](https://drive.google.com/drive/folders/14LbfeSOyGeUZZ3lBmPQWUZCFh_gERLxc?usp=sharing)
 
-See [submission/DEMO.md](submission/DEMO.md) for the accompanying script.
+See [submission/DEMO.md](submission/DEMO.md) for the video link.
 
 ## 10. Screenshots
 
