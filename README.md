@@ -179,13 +179,19 @@ local forward pass through the checkpoint in `models/`.
 
 ## 10. Screenshots
 
-### Traffic overview
+### Ingested traffic overview
+Flow count, time-window count, and window size for the loaded file.
+
 ![Traffic overview](assets/screenshots/01-overview.png)
 
 ### Live Replay Simulation
+The risk gauge and MITRE kill-chain stepper updating window-by-window, as if the traffic were arriving live.
+
 ![Live Replay Simulation](assets/screenshots/03-live-replay-gauge.png)
 
 ### Explainability — top driving features
+Top driving features (gradient×input saliency) behind the current risk score.
+
 ![Explainability — top driving features](assets/screenshots/07-saliency.png)
 
 More screenshots (live replay, K-step rollout, attention weights,
