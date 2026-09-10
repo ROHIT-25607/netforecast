@@ -1,7 +1,14 @@
 # NetForecast — AI World Model for Network Attack Forecasting
 
-**SIH Problem Statement 26153** — National Technical Research Organisation (NTRO)
-*AI based Network Attack Forecasting from Network Traffic Data*
+## 1. Project Information
+
+- **Project Title:** NetForecast — AI World Model for Network Attack Forecasting
+- **PS ID:** SIH26153
+- **PS Title:** AI based Network Attack Forecasting from Network Traffic Data
+- **Category:** Software
+- **Organisation:** National Technical Research Organisation (NTRO)
+
+## 2. Problem Statement & Proposed Solution
 
 NetForecast learns the evolving state of a network from traffic telemetry and
 forecasts the **probability and progression of an attack before compromise
@@ -15,7 +22,29 @@ where the current trajectory is heading.
 
 ---
 
-## 1. Architecture at a glance
+## 3. Key Features
+
+- Windowed flow + packet-level feature pipeline with engineered kill-chain
+  signatures (scan ratio, beacon regularity, admin-port ratio, ...).
+- LSTM **world model** that learns network-state transition dynamics,
+  not just a per-flow label.
+- K-step forward rollout — a forecasted infiltration-probability
+  *trajectory*, plus predicted MITRE ATT&CK stage per step.
+- Built-in explainability: attention weights + gradient×input saliency
+  (and SHAP for the baseline).
+- Offline Streamlit demo with real (CIC-IDS2017) and synthetic checkpoints.
+- Benchmarked against a logistic-regression baseline on an identical,
+  chronologically held-out test split (`reports/benchmark*.md`).
+
+## 4. Technology Stack
+
+- **ML / modelling:** PyTorch (LSTM world model), scikit-learn (baseline),
+  SHAP (explainability)
+- **Data:** pandas, NumPy, CIC-IDS2017 (real) + custom synthetic generator
+- **Demo UI:** Streamlit
+- **Language:** Python
+
+## 5. Architecture at a glance
 
 ```
 Flow records (CSV/PCAP)
@@ -43,35 +72,55 @@ Streamlit demo (demo/app.py) — offline, CSV in → probability timeline,
 flagged flows, attack-stage annotations, explanations out
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full write-up.
+See [docs/architecture.md](docs/architecture.md) for the full write-up.
 
-## 2. Repository layout
+## 6. Repository Structure
 
-```
+```text
 netforecast/
+├── README.md
+├── SUBMISSION_GUIDE.md
+├── LICENSE
+├── submission/
+│   ├── PRESENTATION.md        # 5-slide technical presentation
+│   └── DEMO.md                # 2-minute demo video script + link
+├── docs/
+│   └── architecture.md        # full architecture write-up
+├── assets/
+│   └── screenshots/           # demo screenshots
 ├── src/
-│   ├── simulate_traffic.py   # synthetic CIC-IDS2018-schema flow generator (kill-chain campaigns)
-│   ├── features.py           # flow → windowed state-vector pipeline
-│   ├── dataset.py            # sequence windowing for supervised dynamics learning
-│   ├── world_model.py        # LSTM + attention world model (PyTorch)
-│   ├── train.py               # multi-task training (dynamics + stage + infiltration)
-│   ├── baseline.py            # logistic-regression benchmark baseline
-│   ├── evaluate.py            # F1/precision/recall/FPR benchmark, world model vs baseline
-│   ├── predict.py             # K-step rollout + MITRE mapping + explainability
-│   ├── explain.py             # SHAP explainability for the baseline
-│   ├── real_data_adapter.py   # CIC-IDS2017 CSV -> pipeline schema adapter
-│   └── mitre_mapping.py       # attack-stage ↔ MITRE ATT&CK tactic mapping
-├── demo/app.py                # Streamlit offline demo UI (switch real/synthetic in sidebar)
+│   ├── simulate_traffic.py    # synthetic CIC-IDS2018-schema flow generator (kill-chain campaigns)
+│   ├── features.py            # flow → windowed state-vector pipeline
+│   ├── dataset.py             # sequence windowing for supervised dynamics learning
+│   ├── world_model.py         # LSTM + attention world model (PyTorch)
+│   ├── train.py                # multi-task training (dynamics + stage + infiltration)
+│   ├── baseline.py             # logistic-regression benchmark baseline
+│   ├── evaluate.py             # F1/precision/recall/FPR benchmark, world model vs baseline
+│   ├── predict.py              # K-step rollout + MITRE mapping + explainability
+│   ├── explain.py              # SHAP explainability for the baseline
+│   ├── real_data_adapter.py    # CIC-IDS2017 CSV -> pipeline schema adapter
+│   └── mitre_mapping.py        # attack-stage ↔ MITRE ATT&CK tactic mapping
+├── demo/app.py                 # Streamlit offline demo UI (switch real/synthetic in sidebar)
 ├── data/
-│   ├── raw/                   # place the 8 CIC-IDS2017 daily CSVs here (git-ignored, large)
-│   └── ...                    # generated/adapted flow CSVs (git-ignored, large)
-├── models/                    # checkpoint trained on synthetic data
-├── models_real/                # checkpoint trained on real CIC-IDS2017 data
-├── reports/                   # generated benchmark reports (synthetic + real)
+│   ├── raw/                    # place the 8 CIC-IDS2017 daily CSVs here (git-ignored, large)
+│   └── ...                     # generated/adapted flow CSVs (git-ignored, large)
+├── models/                     # checkpoint trained on synthetic data
+├── models_real/                 # checkpoint trained on real CIC-IDS2017 data
+├── reports/                     # generated benchmark reports (synthetic + real)
 └── requirements.txt
 ```
 
-## 3. Setup
+### What goes where?
+
+| Item | Location |
+|---|---|
+| Source code | `src/`, `demo/` |
+| Architecture / technical documentation | `docs/architecture.md` |
+| Project screenshots | `assets/screenshots/` |
+| Final presentation | `submission/PRESENTATION.md` |
+| Demo video script + link | `submission/DEMO.md` |
+
+## 7. Setup
 
 ```bash
 cd netforecast
@@ -79,7 +128,7 @@ python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate 
 pip install -r requirements.txt
 ```
 
-## 4. Reproduce end-to-end (training + benchmark)
+## 8. Reproduce end-to-end (training + benchmark)
 
 ```bash
 # 1. Generate the labelled synthetic traffic dataset (kill-chain campaigns
@@ -106,7 +155,7 @@ train/val/test split indices are cached in `models/split_indices.npz` so
 `baseline.py` and `evaluate.py` compare against the *same* held-out,
 future-in-time windows the world model never trained on.
 
-## 5. Run the offline demo
+## 9. Run the offline demo
 
 ```bash
 streamlit run demo/app.py
@@ -128,7 +177,7 @@ app will show:
 The app never calls out to the network or any cloud API — inference is a
 local forward pass through the checkpoint in `models/`.
 
-## 6. Trained on the real CIC-IDS2017 dataset
+## 10. Trained on the real CIC-IDS2017 dataset
 
 The project ships a working adapter for **CIC-IDS2017** (the 8 daily
 CICFlowMeter CSVs — e.g. Kaggle "Network Intrusion dataset (CIC-IDS-2017)"
@@ -207,7 +256,7 @@ that dataset's columns to the schema in `simulate_traffic.COLUMNS`, derive
 PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
 5-tuple + time window.
 
-## 7. Why a World Model instead of a classifier?
+## 11. Why a World Model instead of a classifier?
 
 A per-flow classifier scores each flow independently and cannot express
 "the last 10 minutes of scanning + this new SMB connection means lateral
@@ -225,7 +274,7 @@ movement is imminent." NetForecast instead:
   logistic-regression baseline given the identical context window and
   forecast horizon.
 
-## 8. Explainability
+## 12. Explainability
 
 - **Attention weights** (`world_model.AdditiveAttention`) show which of
   the last L observed time windows the model weighted most heavily.
@@ -239,20 +288,62 @@ movement is imminent." NetForecast instead:
 No prediction is surfaced without at least one of these attached — this
 was a hard requirement in the problem statement.
 
-## 9. Limitations / honesty notes
+## 13. Limitations / honesty notes
 
 - The primary trained checkpoint (`models_real/`) is trained on the real
-  **CIC-IDS2017** dataset (§6). A second checkpoint (`models/`) trained on
+  **CIC-IDS2017** dataset (§10). A second checkpoint (`models/`) trained on
   a synthetic generator is also included, mainly as a controlled testbed
   during development (it covers Exfiltration, which CIC-IDS2017 lacks)
-  and as a template for adapting a different real dataset. See §6 for the
+  and as a template for adapting a different real dataset. See §10 for the
   CIC-IDS2017-specific schema gaps (no IPs/timestamps/packet-level fields)
   and how the adapter handles each.
 - The "network state" here is a single aggregated vector for the whole
   monitored segment per time window. A natural extension (noted in
-  `ARCHITECTURE.md`) is a per-host graph state with a GNN encoder for
+  `docs/architecture.md`) is a per-host graph state with a GNN encoder for
   larger enterprise topologies.
 - K-step rollout accumulates model error autoregressively, as in any
   latent-dynamics/world-model rollout; `evaluate.py` reports metrics at
   the trained horizon K to keep this honest rather than cherry-picking
   short horizons.
+
+## 14. Final Presentation
+
+See [submission/PRESENTATION.md](submission/PRESENTATION.md) for the
+5-slide technical presentation.
+
+## 15. Demo Video
+
+See [submission/DEMO.md](submission/DEMO.md) for the 2-minute demo script
+and video link (optional).
+
+## 16. Screenshots
+
+See [assets/screenshots/](assets/screenshots/) for demo screenshots and
+naming convention.
+
+## 17. Installation
+
+```bash
+git clone https://github.com/ROHIT-25607/netforecast.git
+cd netforecast
+pip install -r requirements.txt
+```
+
+## 18. Run
+
+```bash
+streamlit run demo/app.py
+```
+
+## 19. Future Scope
+
+- Per-host graph state with a GNN encoder for larger enterprise topologies
+  (see [docs/architecture.md](docs/architecture.md) §7).
+- Streaming ingest (Kafka/NetFlow collector feed) instead of CSV batch files.
+- Adapters for additional real-world datasets (CIC-IDS2018, CTU-13, CICIoT2023).
+
+## Important
+
+Before submission, make sure the repository is accessible to reviewers.
+Do **not** upload passwords, API keys, access tokens, `.env` files
+containing secrets, or other confidential credentials.
