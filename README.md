@@ -177,6 +177,8 @@ app will show:
 The app never calls out to the network or any cloud API — inference is a
 local forward pass through the checkpoint in `models/`.
 
+## 10. Screenshots
+
 ![Traffic overview](assets/screenshots/01-overview.png)
 
 ![Infiltration probability timeline](assets/screenshots/02-timeline.png)
@@ -187,7 +189,7 @@ More screenshots (live replay, K-step rollout, attention weights,
 flagged flows, MITRE stage reference) are in
 [assets/screenshots/](assets/screenshots/).
 
-## 10. Trained on the real CIC-IDS2017 dataset
+## 11. Trained on the real CIC-IDS2017 dataset
 
 The project ships a working adapter for **CIC-IDS2017** (the 8 daily
 CICFlowMeter CSVs — e.g. Kaggle "Network Intrusion dataset (CIC-IDS-2017)"
@@ -266,7 +268,7 @@ that dataset's columns to the schema in `simulate_traffic.COLUMNS`, derive
 PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
 5-tuple + time window.
 
-## 11. Why a World Model instead of a classifier?
+## 12. Why a World Model instead of a classifier?
 
 A per-flow classifier scores each flow independently and cannot express
 "the last 10 minutes of scanning + this new SMB connection means lateral
@@ -284,7 +286,7 @@ movement is imminent." NetForecast instead:
   logistic-regression baseline given the identical context window and
   forecast horizon.
 
-## 12. Explainability
+## 13. Explainability
 
 - **Attention weights** (`world_model.AdditiveAttention`) show which of
   the last L observed time windows the model weighted most heavily.
@@ -298,13 +300,13 @@ movement is imminent." NetForecast instead:
 No prediction is surfaced without at least one of these attached — this
 was a hard requirement in the problem statement.
 
-## 13. Limitations / honesty notes
+## 14. Limitations / honesty notes
 
 - The primary trained checkpoint (`models_real/`) is trained on the real
-  **CIC-IDS2017** dataset (§10). A second checkpoint (`models/`) trained on
+  **CIC-IDS2017** dataset (§11). A second checkpoint (`models/`) trained on
   a synthetic generator is also included, mainly as a controlled testbed
   during development (it covers Exfiltration, which CIC-IDS2017 lacks)
-  and as a template for adapting a different real dataset. See §10 for the
+  and as a template for adapting a different real dataset. See §11 for the
   CIC-IDS2017-specific schema gaps (no IPs/timestamps/packet-level fields)
   and how the adapter handles each.
 - The "network state" here is a single aggregated vector for the whole
@@ -316,7 +318,7 @@ was a hard requirement in the problem statement.
   the trained horizon K to keep this honest rather than cherry-picking
   short horizons.
 
-## 14. Future Scope
+## 15. Future Scope
 
 - Per-host graph state with a GNN encoder for larger enterprise topologies
   (see [docs/architecture.md](docs/architecture.md) §7).
