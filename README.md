@@ -8,21 +8,31 @@
 - **Category:** Software
 - **Organisation:** National Technical Research Organisation (NTRO)
 
-## 2. Problem Statement & Proposed Solution
+## 2. Problem Statement
 
-NetForecast learns the evolving state of a network from traffic telemetry and
-forecasts the **probability and progression of an attack before compromise
-completes**, mapping predicted behaviour onto MITRE ATT&CK stages, with
-built-in explainability (attention weights + feature saliency/SHAP).
+Static intrusion classifiers score each network flow in isolation as
+benign or malicious. This discards the temporal and causal structure of
+a real attack — the ordered sequence of port scanning, exploitation,
+lateral movement, and command-and-control beaconing that make up an
+actual intrusion. As a result, defenders are typically alerted only
+after individual malicious flows are already captured, often too late
+to prevent compromise.
 
-Unlike a static flow classifier (benign/malicious per flow), this is a
-**World Model**: it learns the transition dynamics `P(S_t+1 | S_t)` of the
-network state itself, then performs K-step forward rollout to simulate
-where the current trajectory is heading.
+## 3. Proposed Solution
 
----
+NetForecast learns the evolving state of a network from traffic
+telemetry and forecasts the **probability and progression of an attack
+before compromise completes**, mapping predicted behaviour onto MITRE
+ATT&CK stages, with built-in explainability (attention weights +
+feature saliency/SHAP).
 
-## 3. Key Features
+Unlike a static flow classifier, this is a **World Model**: it learns
+the transition dynamics `P(S_t+1 | S_t)` of the network state itself,
+then performs a K-step forward rollout to simulate where the current
+trajectory is heading — flagging an attack while it is still unfolding,
+not after.
+
+## 4. Key Features
 
 - Windowed flow + packet-level feature pipeline with engineered kill-chain
   signatures (scan ratio, beacon regularity, admin-port ratio, ...).
@@ -34,9 +44,9 @@ where the current trajectory is heading.
   (and SHAP for the baseline).
 - Offline Streamlit demo with real (CIC-IDS2017) and synthetic checkpoints.
 - Benchmarked against a logistic-regression baseline on an identical,
-  chronologically held-out test split (`reports/benchmark*.md`).
+  chronologically held-out test split — see [docs/architecture.md](docs/architecture.md).
 
-## 4. Technology Stack
+## 5. Technology Stack
 
 - **ML / modelling:** PyTorch (LSTM world model), scikit-learn (baseline),
   SHAP (explainability)
@@ -44,7 +54,7 @@ where the current trajectory is heading.
 - **Demo UI:** Streamlit
 - **Language:** Python
 
-## 5. Architecture at a glance
+## 6. Architecture
 
 ```
 Flow records (CSV/PCAP)
@@ -72,9 +82,11 @@ Streamlit demo (demo/app.py) — offline, CSV in → probability timeline,
 flagged flows, attack-stage annotations, explanations out
 ```
 
-See [docs/architecture.md](docs/architecture.md) for the full write-up.
+See [docs/architecture.md](docs/architecture.md) for the full write-up
+— state representation, benchmark methodology and results, dataset
+adapter details, and honesty/scope notes.
 
-## 6. Repository Structure
+## 7. Repository Structure
 
 ```text
 netforecast/
@@ -82,31 +94,17 @@ netforecast/
 ├── SUBMISSION_GUIDE.md
 ├── LICENSE
 ├── submission/
-│   ├── PRESENTATION.md        # 5-slide technical presentation
-│   └── DEMO.md                # 2-minute demo video script + link
+│   ├── PRESENTATION.md        # SIH presentation
+│   └── DEMO.md                # demo video link
 ├── docs/
 │   └── architecture.md        # full architecture write-up
 ├── assets/
 │   └── screenshots/           # demo screenshots
-├── src/
-│   ├── simulate_traffic.py    # synthetic CIC-IDS2018-schema flow generator (kill-chain campaigns)
-│   ├── features.py            # flow → windowed state-vector pipeline
-│   ├── dataset.py             # sequence windowing for supervised dynamics learning
-│   ├── world_model.py         # LSTM + attention world model (PyTorch)
-│   ├── train.py                # multi-task training (dynamics + stage + infiltration)
-│   ├── baseline.py             # logistic-regression benchmark baseline
-│   ├── evaluate.py             # F1/precision/recall/FPR benchmark, world model vs baseline
-│   ├── predict.py              # K-step rollout + MITRE mapping + explainability
-│   ├── explain.py              # SHAP explainability for the baseline
-│   ├── real_data_adapter.py    # CIC-IDS2017 CSV -> pipeline schema adapter
-│   └── mitre_mapping.py        # attack-stage ↔ MITRE ATT&CK tactic mapping
+├── src/                       # feature pipeline, world model, training, evaluation
 ├── demo/app.py                 # Streamlit offline demo UI (switch real/synthetic in sidebar)
-├── data/
-│   ├── raw/                    # place the 8 CIC-IDS2017 daily CSVs here (git-ignored, large)
-│   └── ...                     # generated/adapted flow CSVs (git-ignored, large)
-├── models/                     # checkpoint trained on synthetic data
-├── models_real/                 # checkpoint trained on real CIC-IDS2017 data
-├── reports/                     # generated benchmark reports (synthetic + real)
+├── data/                       # raw + processed flow data (git-ignored, large)
+├── models/ · models_real/       # trained checkpoints (synthetic / real CIC-IDS2017)
+├── reports/                     # generated benchmark reports
 └── requirements.txt
 ```
 
@@ -117,51 +115,22 @@ netforecast/
 | Source code | `src/`, `demo/` |
 | Architecture / technical documentation | `docs/architecture.md` |
 | Project screenshots | `assets/screenshots/` |
-| Final presentation | `submission/PRESENTATION.md` |
-| Demo video script + link | `submission/DEMO.md` |
+| Final PPT / presentation | `submission/` |
+| Demo video link | `submission/DEMO.md` |
+| Project overview | `README.md` |
 
-## 7. Setup
+## 8. Final Presentation
 
-```bash
-cd netforecast
-python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-```
-
-## 8. Reproduce end-to-end (training + benchmark)
-
-```bash
-# 1. Generate the labelled synthetic traffic dataset (kill-chain campaigns
-#    interleaved with benign background traffic; ~24-48h of simulated flows)
-python src/simulate_traffic.py --out data/synthetic_flows.csv \
-       --n-benign 20000 --n-campaigns 15 --duration-hours 48
-
-# 2. Train the LSTM world model (multi-task: dynamics + stage + infiltration)
-python src/train.py --data data/synthetic_flows.csv --epochs 25
-
-# 3. Train the logistic-regression baseline on the identical features/split
-python src/baseline.py --data data/synthetic_flows.csv
-
-# 4. Benchmark: F1 / precision / recall / FPR, world model vs baseline
-python src/evaluate.py
-# -> writes reports/benchmark.md
-
-# 5. (optional) SHAP explanation of the baseline, for contrast
-python src/explain.py
-```
-
-All scripts are deterministic (fixed seed 42) and the exact chronological
-train/val/test split indices are cached in `models/split_indices.npz` so
-`baseline.py` and `evaluate.py` compare against the *same* held-out,
-future-in-time windows the world model never trained on.
+See [submission/PRESENTATION.md](submission/PRESENTATION.md) for the
+SIH presentation.
 
 ## 9. Demo Video
 
 [Watch on Google Drive](https://drive.google.com/drive/folders/14LbfeSOyGeUZZ3lBmPQWUZCFh_gERLxc?usp=sharing)
 
-See [submission/DEMO.md](submission/DEMO.md) for the video link.
+See [submission/DEMO.md](submission/DEMO.md) for the link.
 
-## 10. Screenshots
+## 10. Screenshots / Prototype Photos
 
 ### Ingested traffic overview
 Flow count, time-window count, and window size for the loaded file.
@@ -178,164 +147,64 @@ Top driving features (gradient×input saliency) behind the current risk score.
 
 ![Explainability — top driving features](assets/screenshots/07-saliency.png)
 
-More screenshots (live replay, K-step rollout, attention weights,
-flagged flows, MITRE stage reference) are in
+More screenshots (live replay result, K-step rollout, attention
+weights, flagged flows, MITRE stage reference) are in
 [assets/screenshots/](assets/screenshots/).
 
-## 11. Run the offline demo
+## 11. Installation
+
+```bash
+git clone https://github.com/ROHIT-25607/netforecast.git
+cd netforecast
+python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+pip install -r requirements.txt
+```
+
+## 12. Run
+
+### Run the demo
 
 ```bash
 streamlit run demo/app.py
 ```
 
-Upload a flow-record CSV (or leave blank to use the bundled sample) and the
-app will show:
+Upload a flow-record CSV (or leave blank to use the bundled sample).
+The app shows the traffic overview, a rolling infiltration-probability
+timeline, a K-step forward simulation with predicted MITRE ATT&CK
+stage, attention/saliency explainability charts, and flagged flows for
+analyst drill-down — fully offline, no external network or cloud-API
+calls.
 
-1. Traffic overview (flow count, window count).
-2. A rolling 1-step-ahead infiltration-probability timeline across the
-   whole file.
-3. A K-step forward simulation from the *current* (most recent) state:
-   per-step infiltration probability + predicted MITRE ATT&CK stage.
-4. Attention weights over the recent context window (explainability).
-5. Top driving traffic features for the current risk score (gradient×input
-   saliency).
-6. The raw flows in the most recent time window, for analyst drill-down.
-
-The app never calls out to the network or any cloud API — inference is a
-local forward pass through the checkpoint in `models/`.
-
-## 12. Trained on the real CIC-IDS2017 dataset
-
-The project ships a working adapter for **CIC-IDS2017** (the 8 daily
-CICFlowMeter CSVs — e.g. Kaggle "Network Intrusion dataset (CIC-IDS-2017)"
-by chethuhn), and a checkpoint trained on it lives in `models_real/`.
+### Reproduce training + benchmark (synthetic data)
 
 ```bash
-# 1. Put the 8 daily CSVs (Monday-WorkingHours.pcap_ISCX.csv, ... ) in data/raw/
+python src/simulate_traffic.py --out data/synthetic_flows.csv \
+       --n-benign 20000 --n-campaigns 15 --duration-hours 48
+python src/train.py --data data/synthetic_flows.csv --epochs 25
+python src/baseline.py --data data/synthetic_flows.csv
+python src/evaluate.py   # -> writes reports/benchmark.md
+```
 
-# 2. Adapt them to the pipeline's schema + kill-chain label taxonomy
+### Train on the real CIC-IDS2017 dataset
+
+```bash
+# put the 8 daily CIC-IDS2017 CSVs in data/raw/, then:
 python src/real_data_adapter.py --raw-dir data/raw \
        --out data/cicids2017_processed.csv --window-flow-count 200
-# -> writes data/cicids2017_processed.csv
-#    and   data/cicids2017_processed.day_boundaries.json
-
-# 3. Train (note --window-seconds here means "flows per window", see below)
 python src/train.py --data data/cicids2017_processed.csv \
        --window-seconds 200 \
        --day-boundaries data/cicids2017_processed.day_boundaries.json \
        --out-dir models_real --epochs 25
-
-# 4. Baseline + benchmark on the identical split
 python src/baseline.py --data data/cicids2017_processed.csv \
        --model-dir models_real --window-seconds 200
-python -c "import sys; sys.path.insert(0,'src'); import evaluate; \
-  evaluate.main(model_dir='models_real', data_path='data/cicids2017_processed.csv', \
-                report_path='reports/benchmark_cicids2017.md')"
 ```
 
-**Results** (`reports/benchmark_cicids2017.md`), on a chronologically
-held-out test split:
+See [docs/architecture.md](docs/architecture.md) for benchmark results
+and adapter details.
 
-| Model | Precision | Recall | F1 | False Positive Rate |
-|---|---|---|---|---|
-| Logistic Regression (baseline) | 0.313 | 0.780 | 0.447 | 0.828 |
-| **LSTM World Model** | **0.842** | 0.823 | **0.832** | **0.075** |
+## 13. Future Scope
 
-The world model's F1 is nearly double the baseline's, with an order of
-magnitude fewer false positives — evidence that learning the traffic's
-temporal dynamics, not just its per-window features, is what drives
-reliable forecasting on real attack traffic. `demo/app.py`'s sidebar lets
-you switch between this real-data checkpoint and the synthetic one.
-
-### CIC-IDS2017 adapter — schema differences & how they were handled
-
-This particular CSV export (see `src/real_data_adapter.py` docstring for
-the full column mapping) does **not** include IP addresses, protocol,
-wall-clock timestamps, or packet-level fields (TTL, retransmissions,
-fragmentation) — only flow-level CICFlowMeter statistics and a `Label`
-column. The adapter therefore:
-
-- Uses row order (CICFlowMeter emits flows in completion order) as a
-  chronology proxy, windowing by a fixed **flow count** (200) instead of
-  wall-clock seconds — pass this value as `--window-seconds` downstream.
-- Zero-fills the missing packet-level and IP-dependent features (they
-  carry no signal here, but the model still learns from all flow-level
-  dynamics: byte/packet counts, TCP flags, IAT statistics, ports).
-- Maps `Label` values onto the 5 kill-chain stages the problem statement
-  asks for: `PortScan`→Reconnaissance, `FTP/SSH-Patator`+`Web Attack *`+
-  `Heartbleed`→Initial_Access, `Bot`→Command_And_Control,
-  `Infiltration`→Lateral_Movement. **DoS/DDoS rows are dropped** (MITRE
-  "Impact", not one of the 5 requested stages). CIC-IDS2017 has **no
-  Exfiltration-labelled traffic**, so the model sees zero training
-  examples for that stage on this dataset — a real dataset limitation,
-  stated here rather than hidden.
-- Splits train/val/test **within each day** and unions them
-  (`dataset.day_aware_split`), because CIC-IDS2017 dedicates each day to
-  one attack family — a single global chronological cut would put entire
-  attack types (e.g. all Friday PortScan traffic) only in the test split
-  with zero training exposure.
-
-To plug in a different real dataset (CIC-IDS2018, CTU-13, CICIoT2023)
-instead, write a similar small adapter following
-`real_data_adapter.py`/`simulate_traffic.COLUMNS` as a template: rename
-that dataset's columns to the schema in `simulate_traffic.COLUMNS`, derive
-`label_stage` from its attack-timeline annotations, and (if it includes
-PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
-5-tuple + time window.
-
-## 13. Why a World Model instead of a classifier?
-
-A per-flow classifier scores each flow independently and cannot express
-"the last 10 minutes of scanning + this new SMB connection means lateral
-movement is imminent." NetForecast instead:
-
-- Represents the **whole monitored network's state** at each 30s window
-  as a single vector (flow volumes, flag mixes, scan/beacon/exfil
-  signatures — see `features.STATE_FEATURE_NAMES`).
-- Learns **P(S_t+1 | S_t)** — i.e. it is trained to predict the *next*
-  state vector, not just today's label — via an MSE dynamics loss plus
-  auxiliary stage/infiltration heads sharing the same recurrent context.
-- **Simulates forward** K steps by re-feeding its own predictions,
-  producing a probability *trajectory*, not a single snapshot score.
-- `reports/benchmark.md` quantifies the resulting gain over a
-  logistic-regression baseline given the identical context window and
-  forecast horizon.
-
-## 14. Explainability
-
-- **Attention weights** (`world_model.AdditiveAttention`) show which of
-  the last L observed time windows the model weighted most heavily.
-- **Gradient × input saliency** (`predict.InfiltrationPredictor._saliency`)
-  ranks which of the ~30 traffic features (SYN rate, scan ratio, beacon
-  regularity, TTL variance, admin-port ratio, …) drove a given
-  infiltration score.
-- **SHAP** (`explain.py`) is used on the logistic-regression baseline as
-  an independent, model-agnostic cross-check of feature importance.
-
-No prediction is surfaced without at least one of these attached — this
-was a hard requirement in the problem statement.
-
-## 15. Limitations / honesty notes
-
-- The primary trained checkpoint (`models_real/`) is trained on the real
-  **CIC-IDS2017** dataset (§12). A second checkpoint (`models/`) trained on
-  a synthetic generator is also included, mainly as a controlled testbed
-  during development (it covers Exfiltration, which CIC-IDS2017 lacks)
-  and as a template for adapting a different real dataset. See §12 for the
-  CIC-IDS2017-specific schema gaps (no IPs/timestamps/packet-level fields)
-  and how the adapter handles each.
-- The "network state" here is a single aggregated vector for the whole
-  monitored segment per time window. A natural extension (noted in
-  `docs/architecture.md`) is a per-host graph state with a GNN encoder for
-  larger enterprise topologies.
-- K-step rollout accumulates model error autoregressively, as in any
-  latent-dynamics/world-model rollout; `evaluate.py` reports metrics at
-  the trained horizon K to keep this honest rather than cherry-picking
-  short horizons.
-
-## 16. Future Scope
-
-- Per-host graph state with a GNN encoder for larger enterprise topologies
-  (see [docs/architecture.md](docs/architecture.md) §7).
+- Per-host graph state with a GNN encoder for larger enterprise topologies.
 - Streaming ingest (Kafka/NetFlow collector feed) instead of CSV batch files.
 - Adapters for additional real-world datasets (CIC-IDS2018, CTU-13, CICIoT2023).
+- Direct SIEM/SOAR integration for analyst alerting.
