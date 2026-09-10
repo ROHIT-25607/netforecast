@@ -179,10 +179,13 @@ local forward pass through the checkpoint in `models/`.
 
 ## 10. Screenshots
 
+### Traffic overview
 ![Traffic overview](assets/screenshots/01-overview.png)
 
+### Infiltration probability timeline
 ![Infiltration probability timeline](assets/screenshots/02-timeline.png)
 
+### Explainability — top driving features
 ![Explainability — top driving features](assets/screenshots/07-saliency.png)
 
 More screenshots (live replay, K-step rollout, attention weights,
