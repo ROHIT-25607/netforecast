@@ -177,14 +177,15 @@ app will show:
 The app never calls out to the network or any cloud API — inference is a
 local forward pass through the checkpoint in `models/`.
 
+![Traffic overview](assets/screenshots/01-overview.png)
+
 ![Infiltration probability timeline](assets/screenshots/02-timeline.png)
 
-![K-step forward simulation](assets/screenshots/05-rollout.png)
+![Explainability — top driving features](assets/screenshots/07-saliency.png)
 
-![Explainability — attention and feature saliency](assets/screenshots/07-saliency.png)
-
-More screenshots (traffic overview, live replay, flagged flows, MITRE
-stage reference) are in [assets/screenshots/](assets/screenshots/).
+More screenshots (live replay, K-step rollout, attention weights,
+flagged flows, MITRE stage reference) are in
+[assets/screenshots/](assets/screenshots/).
 
 ## 10. Trained on the real CIC-IDS2017 dataset
 
