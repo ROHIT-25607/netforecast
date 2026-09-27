@@ -1,0 +1,31 @@
+# Keep the build context small. Without this Docker uploads data/raw/ (844 MB),
+# the 396 MB processed capture and the whole .git history before the first
+# layer even runs.
+.git/
+.github/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Large captures. The small committed sample IS copied, explicitly, by the
+# Dockerfile.
+data/raw/
+data/*.csv
+!data/sample_flows.csv
+data/*.npz
+
+# The random-forest baselines are 9 MB / 31 MB and are not needed to serve.
+models/baseline_rf.joblib
+models_real/baseline_rf.joblib
+
+tests/
+reports/
+assets/
+submission/
+docs/
+notebooks/
+demo/

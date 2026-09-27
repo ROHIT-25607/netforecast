@@ -346,6 +346,12 @@ tool works on an air-gapped network. If it is missing, fetch it once with
 docker compose up --build     # dashboard on http://localhost:8000
 ```
 
+The image bundles the checkpoints, the dashboard assets and the sample capture,
+and the running container makes no outbound network calls — the same air-gapped
+posture the on-prem deployment assumes. The large CIC-IDS2017 capture is *not*
+baked in (396 MB); mount it with the `./data` volume in `docker-compose.yml` to
+score it inside the container.
+
 ## 13. Run
 
 ### Start the service

@@ -9,10 +9,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# CPU-only torch: the model is ~88K parameters and inference is ~1 ms on CPU,
-# so a CUDA wheel would add gigabytes for no benefit.
+# CPU-only torch: the model is ~88K parameters and inference is ~3 ms on CPU,
+# so a CUDA wheel would add gigabytes for no benefit. The version spec must be
+# quoted -- unquoted, the shell reads ">" as a redirection, installs an
+# unpinned torch, and writes the output to a file called "=2.2".
 COPY requirements.txt .
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch>=2.2 \
+RUN pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.2,<3" \
  && pip install -r requirements.txt
 
 COPY netforecast/ ./netforecast/
