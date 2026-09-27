@@ -22,14 +22,15 @@ from netforecast.features import (
     window_label,
 )
 
-from .conftest import FIXTURES
 
+def test_vectorized_matches_golden_bit_for_bit(synthetic_df, golden):
+    """Locks the vectorized rewrite to the original loop implementation.
 
-@pytest.mark.skipif(not (FIXTURES / "golden_synthetic_w30.npz").exists(),
-                    reason="golden fixture not present")
-def test_vectorized_matches_golden_bit_for_bit(synthetic_df):
-    """Locks the vectorized rewrite to the original loop implementation."""
-    g = np.load(FIXTURES / "golden_synthetic_w30.npz")
+    Regenerate the fixtures with `python tools/make_golden.py` if and only if
+    the feature definition is intentionally changed -- which also invalidates
+    the shipped checkpoints.
+    """
+    g = golden
     states, label_ids, timestamps, widx = build_state_sequence(synthetic_df, 30, with_index=True)
 
     assert np.array_equal(states, g["states"]), "state matrix drifted from the golden fixture"

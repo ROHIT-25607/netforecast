@@ -22,10 +22,30 @@ def _first_existing(*paths):
 
 @pytest.fixture(scope="session")
 def synthetic_csv() -> Path:
+    """A capture to exercise the pipeline with.
+
+    Prefers the full synthetic set when present, but a fresh clone only has the
+    committed sample -- which is the case CI runs in.
+    """
     p = _first_existing(SYNTHETIC_CSV, SAMPLE_CSV)
     if p is None:
-        pytest.skip("no sample capture present; run `make sample`")
+        pytest.skip("no capture present; run `make sample`")
     return p
+
+
+@pytest.fixture(scope="session")
+def golden(synthetic_csv):
+    """The golden fixture matching whichever capture is being used.
+
+    Fixture and CSV must correspond, or the bit-exactness test compares the
+    wrong things -- which is exactly what happened when a clean clone fell back
+    from synthetic_flows.csv to sample_flows.csv.
+    """
+    name = {"synthetic_flows": "golden_synthetic_w30.npz",
+            "sample_flows": "golden_sample_w30.npz"}.get(synthetic_csv.stem)
+    if name is None or not (FIXTURES / name).exists():
+        pytest.skip(f"no golden fixture for {synthetic_csv.name}; run tools/make_golden.py")
+    return np.load(FIXTURES / name)
 
 
 @pytest.fixture(scope="session")
