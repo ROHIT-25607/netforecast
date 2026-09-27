@@ -64,10 +64,10 @@ The per-step table in section 3 uses a *cumulative* label (malicious anywhere in
 
 | Operation | Median | p99 |
 |---|---|---|
-| Featurize 5k flows | 17.9 ms | – |
-| Single forward pass | 0.88 ms | 1.93 ms |
-| 5-step rollout | 4.24 ms | 5.03 ms |
-| Rollout + explainability | 13.17 ms | – |
+| Featurize 5k flows | 40.6 ms | – |
+| Single forward pass | 0.91 ms | 3.93 ms |
+| 5-step rollout | 5.10 ms | 6.20 ms |
+| Rollout + explainability | 18.74 ms | – |
 
 Everything runs offline on CPU — no GPU and no network call in the inference path.
 

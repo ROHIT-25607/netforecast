@@ -7,6 +7,17 @@
   "horizon_k": 5,
   "window_seconds": 200,
   "seed": 42,
-  "data": "../data/cicids2017_processed.csv",
-  "day_boundaries": "../data/cicids2017_processed.day_boundaries.json"
+  "data": "data/cicids2017_processed.csv",
+  "day_boundaries": "data/cicids2017_processed.day_boundaries.json",
+  "loss_weights": {
+    "dyn": 1.0,
+    "stage": 1.0,
+    "inf": 1.0
+  },
+  "rollout_steps": 1,
+  "best_epoch": 17,
+  "select_on": "pr_auc",
+  "val_pr_auc": 0.9064645316827123,
+  "val_roc_auc": 0.9270830052183407,
+  "temperature": 2.9171178340911865
 }

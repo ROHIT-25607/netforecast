@@ -39,6 +39,11 @@ class InfiltrationPredictor:
         self.mean, self.std = norm["mean"], norm["std"]
 
         self.model_dir = model_dir
+        # Temperature scaling fitted on validation at train time. Divides the
+        # logit before the sigmoid, so it corrects over-confidence without
+        # touching the ranking (AUC is unchanged). Checkpoints trained before
+        # calibration existed have no entry and default to 1.0 -- a no-op.
+        self.temperature = float(self.cfg.get("temperature", 1.0)) or 1.0
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.model = WorldModel(self.cfg["n_features"], self.cfg["n_stages"],
                                 self.cfg["hidden_dim"], self.cfg["num_layers"]).to(self.device)
@@ -48,6 +53,10 @@ class InfiltrationPredictor:
         self.model.eval()
 
     # ------------------------------------------------------------------ utils
+
+    def _prob(self, logit: torch.Tensor) -> torch.Tensor:
+        """Calibrated probability from a raw infiltration logit."""
+        return torch.sigmoid(logit / self.temperature)
 
     def normalize(self, raw_states):
         return (raw_states - self.mean) / self.std
@@ -82,7 +91,7 @@ class InfiltrationPredictor:
         with torch.no_grad():
             for i in range(0, len(x_all), batch_size):
                 out = self.model(x_all[i:i + batch_size])
-                probs.append(torch.sigmoid(out["infiltration_logit"]).cpu().numpy())
+                probs.append(self._prob(out["infiltration_logit"]).cpu().numpy())
                 sp = torch.softmax(out["stage_logits"], dim=-1)
                 conf, ids = sp.max(dim=-1)
                 stage_ids.append(ids.cpu().numpy())
@@ -114,7 +123,7 @@ class InfiltrationPredictor:
                 p_steps, s_steps, c_steps = [], [], []
                 for _ in range(k):
                     out = self.model(cur)
-                    p_steps.append(torch.sigmoid(out["infiltration_logit"]))
+                    p_steps.append(self._prob(out["infiltration_logit"]))
                     sp = torch.softmax(out["stage_logits"], dim=-1)
                     conf, ids = sp.max(dim=-1)
                     s_steps.append(ids)
@@ -175,7 +184,7 @@ class InfiltrationPredictor:
                 out = self.model(cur.unsqueeze(0))
                 if attention_first is None:
                     attention_first = out["attention"].squeeze(0).cpu().numpy().tolist()
-                prob = torch.sigmoid(out["infiltration_logit"]).item()
+                prob = self._prob(out["infiltration_logit"]).item()
                 stage_probs = torch.softmax(out["stage_logits"], dim=-1).squeeze(0).cpu().numpy()
                 stage_id = int(stage_probs.argmax())
                 stage = ID_TO_STAGE[stage_id]

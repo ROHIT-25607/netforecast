@@ -42,11 +42,11 @@ jobs:
             "models/world_model.pt":
               "a4351f08b8a9d7a0a25c50d8e98b77af3a0aa530ee0acc1a0837f2f5f7a2bb4b",
             "models_real/world_model.pt":
-              "549b26c13f08d21b04c2dfd69221b1c6574169d6427b88061bd8883d884406fe",
+              "43a53b7f33e5458f893c50709a227b2ba9fac64d4bf2c232129cdc3d9a06e287",
             "models/norm_stats.npz":
               "dce95e908e9971a32e4f24e966541d1ec8259863c6721fd1197b1a5b1e2c617c",
             "models_real/norm_stats.npz":
-              "eeb6ea26b8060d9522cf615f12c08634b120d0a0d7dc7613e997428c8242428e",
+              "723f3d3f648ed1fb68e08e987ab7a255e4cbd8a0526941d49f320fc571a5c5c7",
           }
           bad = []
           for path, want in EXPECTED.items():

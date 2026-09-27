@@ -137,19 +137,61 @@ ablation and a latency profile, and writes `reports/benchmark*.md` plus ROC/PR
 curve PNGs.
 
 **Results on real CIC-IDS2017 traffic** (`reports/benchmark_cicids2017.md`,
-1,841 held-out windows, 32.6% positive):
+1,839 held-out windows, 32.3% positive):
 
-| Model | Precision | Recall | F1 | FPR | ROC-AUC |
-|---|---|---|---|---|---|
-| Logistic Regression | 0.313 | 0.780 | 0.447 | 0.828 | 0.461 |
-| Random Forest | 0.956 | 0.653 | 0.776 | **0.015** | **0.947** |
-| **LSTM World Model** | 0.842 | 0.823 | **0.832** | 0.075 | 0.898 |
+| Model | Precision | Recall | F1 | FPR | ROC-AUC | PR-AUC |
+|---|---|---|---|---|---|---|
+| Logistic Regression | 0.311 | 0.783 | 0.445 | 0.829 | 0.452 | 0.413 |
+| Random Forest | 0.950 | 0.665 | 0.782 | **0.017** | **0.948** | 0.905 |
+| **LSTM World Model** | 0.894 | 0.798 | **0.843** | 0.045 | 0.940 | **0.907** |
 
-The world model wins on F1 by **+0.056** over the strongest baseline, and the
+The world model wins on F1 by **+0.061** over the strongest baseline, and the
 reason is balance rather than raw separability: the random forest is highly
-precise but misses 35% of attack windows. In a SOC that is the expensive error.
-We report the forest's *higher* ROC-AUC rather than omitting it — it ranks well
-but cannot be thresholded into usable recall.
+precise but misses 33% of attack windows. In a SOC that is the expensive error.
+On pure ranking the two are now level (ROC-AUC 0.940 vs 0.948, PR-AUC 0.907 vs
+0.905); an earlier checkpoint trailed the forest clearly on ROC-AUC, and closing
+that gap was the main goal of the final-round retrain (§6a).
+
+## 6a. Final-round retrain and model selection
+
+The CIC-IDS2017 checkpoint was retrained once for the final round. Two findings are
+worth recording because both are counter-intuitive.
+
+**What helped was training hygiene, not the loss function.** Adding
+`ReduceLROnPlateau`, gradient clipping and early stopping, and restoring the
+best-validation weights before writing the checkpoint, moved held-out ROC-AUC from
+0.898 to 0.940 and rollout retention from 81% to 92%. The previous run had no
+scheduler and no early stopping; its `history.json` shows validation loss spiking
+from 0.82 at epoch 10 to 2.10 at epoch 14.
+
+**What did not help was the thing that looked most broken.** Measured at the old
+weights, the unweighted loss gave the 33-dim dynamics MSE ~70% of the total and the
+infiltration head — the quantity every reported metric scores — only 8-12%. Rebalancing
+toward the BCE term was the obvious fix and made held-out PR-AUC *worse* (0.839 vs
+0.907). A multi-step autoregressive dynamics loss, aimed squarely at rollout drift,
+came out level-to-slightly-worse. Both are retained as `--w-dyn` / `--w-inf` /
+`--rollout-steps` and default to the configuration that won.
+
+**Selection protocol.** Hyperparameters and seed were chosen on the **validation**
+split; test was consulted only to decide promotion, and only after the candidate was
+fixed. A candidate replaced an incumbent only if it beat it on *every* held-out
+metric. The synthetic checkpoint failed that test — retraining made it worse on all
+four — so the original synthetic weights ship unchanged. `tools/eval_seeds.py` and
+`tools/ab_compare.py` reproduce both comparisons.
+
+**Split correction.** `day_aware_split` derived per-day window indices as
+`rows // window`, while `features.build_state_sequence` buckets on the cumulative row
+count. On CIC-IDS2017 that drifted by up to 2 windows and assumed 12,247 windows
+against an actual 12,251, putting a small number of windows in the wrong split. The
+current checkpoint uses the corrected indices; the previous one did not.
+
+| Metric (identical held-out split) | previous | current |
+|---|---|---|
+| F1 | 0.832 | **0.843** |
+| ROC-AUC | 0.898 | **0.940** |
+| PR-AUC | 0.881 | **0.907** |
+| 5-step rollout F1 | 0.670 | **0.775** |
+| Rollout retention | 81% | **92%** |
 
 ### Forecast quality vs horizon — the world-model claim
 
@@ -161,20 +203,20 @@ no new traffic.
 
 | Horizon | t+1 | t+2 | t+3 | t+4 | t+5 |
 |---|---|---|---|---|---|
-| F1 | 0.837 | 0.818 | 0.791 | 0.740 | 0.675 |
-| ROC-AUC | 0.926 | 0.910 | 0.884 | 0.858 | 0.826 |
+| F1 | 0.849 | 0.841 | 0.815 | 0.794 | 0.775 |
+| ROC-AUC | 0.953 | 0.946 | 0.936 | 0.929 | 0.923 |
 
-Against the same label, the single forward pass scores F1 0.832 and the 5-step
-rollout scores 0.675 — **81% retention** while running four of its five steps on
+Against the same label, the single forward pass scores F1 0.843 and the 5-step
+rollout scores 0.775 — **92% retention** while running four of its five steps on
 self-generated state. Degradation with horizon is expected and is the signature
 of genuine autoregressive dynamics; a model that had only memorised a
 current-window mapping would collapse immediately once fed its own output.
 
 ### Lead time
 
-Of 41 attack-episode onsets assessable within the held-out period, the model was
-already above threshold **before the first malicious flow was recorded** in 20
-(49%), median 1 window (200 flows), maximum 6 windows (1,200 flows). Lead is
+Of 40 attack-episode onsets assessable within the held-out period, the model was
+already above threshold **before the first malicious flow was recorded** in 18
+(45%), median 1 window (200 flows), maximum 3 windows (600 flows). Lead is
 measured against the *labelled* onset, so this is warning issued before the
 attack traffic exists in the capture — not merely before an analyst noticed.
 
@@ -285,9 +327,16 @@ Three properties matter for scale:
   monitored segment per time window. A natural extension is a per-host
   graph state with a GNN encoder for larger enterprise topologies (§7).
 - K-step rollout accumulates model error autoregressively, as in any
-  latent-dynamics/world-model rollout. `evaluate.py` now reports metrics at
-  **every** horizon step, so the degradation is visible rather than implied:
-  F1 falls from 0.837 at t+1 to 0.675 at t+5 on real traffic.
+  latent-dynamics/world-model rollout. `evaluate.py` reports metrics at **every**
+  horizon step, so the degradation is visible rather than implied: F1 falls from
+  0.849 at t+1 to 0.775 at t+5 on real traffic.
+- **The shipped real-data checkpoint is the validation-selected seed of three.**
+  Held-out PR-AUC across those seeds ranged 0.879-0.907. Its reported numbers are
+  reproducible from the committed weights, but a retrain from another seed would
+  not necessarily reproduce them.
+- **The previously shipped checkpoint was trained against a slightly misaligned
+  day-aware split** (see §6a). The drift affected roughly 0.1% of windows; the
+  current checkpoint uses the corrected split.
 - **On synthetic data the world model does not beat a random forest**
   (F1 0.938 vs 0.941). The generator is close to trivially separable, so the
   baselines saturate and the comparison carries little information. The

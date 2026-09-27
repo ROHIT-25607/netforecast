@@ -464,20 +464,30 @@ function drawTimeline(){
   const tl = S.timeline;
   const xs = tl.t, ys = tl.probability;
   const unit = S.meta.window_unit === "flows" ? "flow #" : "time (s)";
+  // Ground truth as a background band: where an attack was actually labelled.
+  // Seeing the blue curve rise *before* the red band begins is the lead-time
+  // claim made visible, so it is worth the extra trace.
+  const truth = (tl.truth && tl.truth.length === xs.length)
+    ? tl.truth.map(v => (v && v !== "Benign") ? 1 : 0) : null;
+
   Plotly.react("timeline", [
-    {   // threshold bands read as background, so they sit behind the series
+    truth ? {
+      x:xs, y:truth, type:"scatter", mode:"lines", name:"Labelled attack window",
+      line:{width:0, shape:"hv"}, fill:"tozeroy", fillcolor:"rgba(208,59,59,0.16)",
+      hoverinfo:"skip", showlegend:true,
+    } : {
       x:[xs[0], xs[xs.length-1]], y:[1,1], type:"scatter", mode:"lines",
       line:{width:0}, fill:"tozeroy", fillcolor:"rgba(208,59,59,0.05)",
       hoverinfo:"skip", showlegend:false,
     },
     {
-      x:xs, y:ys, type:"scatter", mode:"lines", name:"Infiltration probability",
+      x:xs, y:ys, type:"scatter", mode:"lines", name:"Predicted infiltration probability",
       line:{color:C.s1, width:2, shape:"spline", smoothing:0.4},
       fill:"tozeroy", fillcolor:"rgba(57,135,229,0.14)",
       hovertemplate:"%{y:.1%}<br><span style='color:#898781'>"+unit+" %{x:,}</span><extra></extra>",
     },
     {
-      x:[], y:[], type:"scatter", mode:"markers", name:"cursor",
+      x:[], y:[], type:"scatter", mode:"markers", name:"cursor", showlegend:false,
       marker:{color:C.s2, size:11, line:{color:C.surface, width:2}},
       hoverinfo:"skip",
     },
@@ -486,6 +496,9 @@ function drawTimeline(){
     yaxis:Object.assign({}, AX, {range:[0,1], tickformat:".0%",
            title:{text:"infiltration probability", font:{color:C.muted, size:11}}}),
     hovermode:"x unified",
+    showlegend: !!truth,
+    legend:{orientation:"h", y:1.12, x:0, font:{color:C.ink2, size:11},
+            bgcolor:"rgba(0,0,0,0)"},
     shapes:[{type:"line", x0:xs[0], x1:xs[xs.length-1], y0:0.66, y1:0.66,
              line:{color:C.critical, width:1, dash:"dot"}}],
     annotations:[{x:xs[xs.length-1], y:0.66, xanchor:"right", yanchor:"bottom",
