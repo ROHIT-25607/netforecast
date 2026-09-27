@@ -3,12 +3,12 @@ SHAP-based explainability for the logistic-regression baseline, used
 mainly in the benchmark report / demo to contrast with the world model's
 built-in attention + saliency explanations (see predict.py).
 """
-import numpy as np
 import joblib
+import numpy as np
 import shap
 
-from dataset import CONTEXT_LEN
-from features import STATE_FEATURE_NAMES
+from .dataset import CONTEXT_LEN
+from .features import STATE_FEATURE_NAMES
 
 
 def flattened_feature_names(context_len=CONTEXT_LEN):

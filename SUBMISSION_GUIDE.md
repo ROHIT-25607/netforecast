@@ -5,19 +5,22 @@ Checklist before sharing this repository link, following the standard
 
 ## Required repository content
 
-- [x] Actual source code is present (`src/`, `demo/app.py`).
+- [x] Actual source code is present (`netforecast/`, `server/`, `tools/`, `tests/`).
 - [x] `README.md` explains the project clearly.
 - [x] PS ID and PS title are included (SIH 26153, NTRO).
 - [x] Problem statement and proposed solution are explained.
 - [x] Key features are listed.
 - [x] Technology stack is listed.
 - [x] Setup and run instructions work.
-- [ ] Team members and roles are mentioned.
+- [x] Team members and roles are mentioned (`README.md` §1).
 - [x] Important screenshots are added to `assets/screenshots/`.
 - [x] Final PPT/presentation is placed in `submission/` (or an external
       link is added to `submission/PRESENTATION.md`).
 - [x] Demo video link is added to `submission/DEMO.md` (optional).
-- [ ] Repository is accessible to reviewers.
+- [x] Repository is accessible to reviewers.
+- [x] A fresh clone runs the demo with no dataset download and no training
+      (checkpoints + `data/sample_flows.csv` + vendored dashboard assets are committed).
+- [x] Tests and lint pass in CI (`.github/workflows/ci.yml`).
 
 ## Recommended structure
 
@@ -28,16 +31,17 @@ netforecast/
 ├── submission/
 │   ├── PRESENTATION.md
 │   └── DEMO.md
-├── src/
+├── netforecast/            # ML package
+├── server/                 # FastAPI service + dashboard
+├── tools/ · tests/
 ├── docs/
 │   └── architecture.md
 ├── assets/
 │   └── screenshots/
-├── demo/
 ├── data/
 ├── models/ · models_real/
 ├── reports/
-└── requirements.txt
+└── requirements.txt · pyproject.toml · Dockerfile
 ```
 
 ## Presentation
@@ -68,4 +72,14 @@ folder's `README.md` for the recommended list and naming convention.
 
 Open the repository in a private/incognito browser window (or while
 logged out) and verify a reviewer can access the code, PPT, screenshots,
-documentation, and any submitted links.
+documentation, and any submitted links — including the Google Drive demo
+video folder, which must not prompt for access.
+
+Then do a cold-start check in a scratch directory:
+
+```bash
+git clone <repo-url> && cd netforecast
+pip install -r requirements.txt
+uvicorn server.main:app          # dashboard must load and score a capture
+pytest -q                        # must pass
+```

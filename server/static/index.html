@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetForecast</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>&#128225;</text></svg>">
+<!-- Vendored, not a CDN: this tool is meant to run on air-gapped CII networks,
+     so the dashboard must render with no outbound network access. -->
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+:root{
+  color-scheme: dark;
+  --plane:#0d0d0d; --surface:#1a1a19; --surface-2:#232321;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+  --series-1:#3987e5; --series-2:#d95926;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --radius:10px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--plane); color:var(--ink); font-family:var(--font);
+  font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--series-1)}
+.wrap{max-width:1440px; margin:0 auto; padding:0 16px 64px}
+
+/* ---------- header ---------- */
+header{
+  position:sticky; top:0; z-index:20; background:rgba(13,13,13,0.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--border);
+}
+.hd{max-width:1440px; margin:0 auto; padding:12px 16px; display:flex; gap:16px;
+    align-items:center; flex-wrap:wrap}
+.brand{display:flex; align-items:baseline; gap:10px; margin-right:auto}
+.brand h1{font-size:17px; margin:0; letter-spacing:-0.01em}
+.brand .sub{color:var(--muted); font-size:12px}
+.pill{font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border);
+      color:var(--ink-2); white-space:nowrap}
+.pill.live{border-color:var(--good); color:var(--good)}
+
+select,button,input[type=file],input[type=range]{font-family:inherit; font-size:13px}
+select,button{
+  background:var(--surface-2); color:var(--ink); border:1px solid var(--border);
+  border-radius:8px; padding:7px 12px; cursor:pointer;
+}
+button:hover:not(:disabled),select:hover{border-color:#4a4a46}
+button:disabled{opacity:.45; cursor:not-allowed}
+button.primary{background:var(--series-1); border-color:var(--series-1); color:#fff; font-weight:600}
+button.primary:hover:not(:disabled){background:#2a78d6}
+
+/* ---------- layout ---------- */
+h2{font-size:13px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+   color:var(--muted); margin:0 0 10px}
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:16px; margin-bottom:16px;
+}
+.grid{display:grid; gap:16px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g2{grid-template-columns:1fr 1fr}
+.g-main{grid-template-columns:minmax(0,340px) minmax(0,1fr)}
+@media (max-width:1000px){ .g4{grid-template-columns:repeat(2,1fr)} .g2,.g-main{grid-template-columns:1fr} }
+@media (max-width:560px){ .g4{grid-template-columns:1fr} }
+
+/* ---------- stat tiles ---------- */
+.tile{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px}
+.tile .k{color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.05em}
+.tile .v{font-size:26px; font-weight:600; margin-top:4px; letter-spacing:-0.02em}
+.tile .v small{font-size:13px; font-weight:400; color:var(--ink-2)}
+
+/* ---------- kill chain ---------- */
+.chain{display:flex; flex-direction:column; gap:5px; margin-top:4px}
+.step{
+  padding:8px 11px; border-radius:8px;
+  font-size:12px; font-weight:600; border:1px solid var(--border);
+  background:var(--surface-2); color:var(--muted);
+  display:flex; align-items:center; gap:9px;
+}
+.step .idx{font-size:10px; color:var(--muted); margin-left:auto;
+           font-variant-numeric:tabular-nums}
+.step .dot{width:7px; height:7px; border-radius:50%; background:var(--axis); flex:none}
+.step.on{background:rgba(57,135,229,0.16); border-color:var(--series-1); color:var(--ink)}
+.step.on .dot{background:var(--series-1)}
+.step .lbl{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.step.on .idx{color:var(--series-1)}
+
+/* ---------- risk readout ---------- */
+.risk{display:flex; align-items:center; gap:10px; margin-top:10px}
+.risk .badge{
+  display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px;
+  font-weight:700; font-size:12px; letter-spacing:.03em; border:1px solid;
+}
+.b-LOW{color:var(--good); border-color:var(--good); background:rgba(12,163,12,.12)}
+.b-MEDIUM{color:var(--warning); border-color:var(--warning); background:rgba(250,178,25,.12)}
+.b-HIGH{color:var(--critical); border-color:var(--critical); background:rgba(208,59,59,.12)}
+.risk .note{color:var(--muted); font-size:12px}
+
+/* ---------- replay bar ---------- */
+.ctrl{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px}
+.ctrl label{color:var(--muted); font-size:12px; display:flex; align-items:center; gap:8px}
+input[type=range]{accent-color:var(--series-1); width:150px}
+#scrub{flex:1; min-width:180px; width:auto}
+
+/* ---------- tables ---------- */
+.tbl-wrap{overflow:auto; max-height:320px; border:1px solid var(--border); border-radius:8px}
+table{border-collapse:collapse; width:100%; font-size:12px}
+th,td{padding:7px 10px; text-align:left; white-space:nowrap; border-bottom:1px solid var(--grid)}
+th{position:sticky; top:0; background:var(--surface-2); color:var(--ink-2); font-weight:600;
+   font-size:11px; text-transform:uppercase; letter-spacing:.04em; z-index:1}
+td{color:var(--ink-2); font-variant-numeric:tabular-nums}
+tbody tr:hover td{background:rgba(255,255,255,.03)}
+tbody tr:last-child td{border-bottom:none}
+td.stage{color:var(--ink); font-weight:600}
+
+/* ---------- misc ---------- */
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.hint{color:var(--muted); font-size:12px; margin-top:8px}
+.bar{height:5px; background:var(--surface-2); border-radius:999px; overflow:hidden; margin-top:8px}
+.bar > i{display:block; height:100%; background:var(--series-1); width:0; transition:width .25s}
+.banner{padding:10px 14px; border-radius:8px; border:1px solid; font-size:13px; margin-bottom:16px}
+.banner.err{color:var(--critical); border-color:var(--critical); background:rgba(208,59,59,.1)}
+.banner.info{color:var(--ink-2); border-color:var(--border); background:var(--surface)}
+.hidden{display:none !important}
+.chart{width:100%}
+.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--ink-2); margin-top:6px}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend i{width:10px; height:10px; border-radius:2px; display:inline-block}
+.footnote{color:var(--muted); font-size:11.5px; margin-top:10px; line-height:1.55}
+code{background:var(--surface-2); padding:1px 5px; border-radius:4px; font-size:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd">
+    <div class="brand">
+      <h1>NetForecast</h1>
+      <span class="sub">world model for network attack forecasting</span>
+    </div>
+    <span class="pill" id="pill-device">cpu</span>
+    <span class="pill" id="pill-session">no session</span>
+    <select id="dataset" title="Trained model / capture"></select>
+    <button class="primary" id="btn-load">Load capture</button>
+    <button id="btn-upload-toggle" title="Score your own CSV">Upload CSV</button>
+    <a href="/docs" target="_blank" rel="noopener"><button>API docs</button></a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div id="upload-row" class="card hidden">
+    <h2>Score your own capture</h2>
+    <div class="ctrl">
+      <input type="file" id="file" accept=".csv">
+      <label>model
+        <select id="upload-model"></select>
+      </label>
+      <button class="primary" id="btn-upload">Upload &amp; score</button>
+    </div>
+    <div class="hint">CICFlowMeter-style flow records. Missing schema columns are reported
+      explicitly rather than failing silently.</div>
+  </div>
+
+  <div id="banner" class="banner info">Select a capture and press <b>Load capture</b>.</div>
+  <div id="progress" class="card hidden">
+    <div id="progress-msg" class="small">Loading…</div>
+    <div class="bar"><i id="progress-bar"></i></div>
+  </div>
+
+  <div id="app" class="hidden">
+
+    <!-- ---------- stat tiles ---------- -->
+    <div class="grid g4" style="margin-bottom:16px">
+      <div class="tile"><div class="k">Flow records</div><div class="v" id="t-flows">–</div></div>
+      <div class="tile"><div class="k">Time windows</div><div class="v" id="t-windows">–</div></div>
+      <div class="tile"><div class="k">Window size</div><div class="v" id="t-window">–</div></div>
+      <div class="tile"><div class="k">Peak risk in capture</div><div class="v" id="t-peak">–</div></div>
+    </div>
+
+    <!-- ---------- gauge + timeline ---------- -->
+    <div class="grid g-main">
+      <div class="card">
+        <h2>Current risk</h2>
+        <div id="gauge" style="height:136px; font-family:var(--font)"></div>
+        <div class="risk">
+          <span class="badge b-LOW" id="risk-badge">LOW</span>
+          <span class="note" id="risk-note">peak over the next K windows</span>
+        </div>
+        <h2 style="margin-top:20px">MITRE kill chain</h2>
+        <div class="chain" id="chain"></div>
+        <div class="footnote" id="chain-note"></div>
+      </div>
+
+      <div class="card">
+        <h2>Infiltration probability over the capture</h2>
+        <div id="timeline" class="chart" style="height:280px"></div>
+        <div class="ctrl" style="margin:12px 0 0">
+          <button class="primary" id="btn-play">▶ Play replay</button>
+          <button id="btn-restart" title="Back to the start">⟲</button>
+          <label>speed <input type="range" id="speed" min="1" max="40" value="8">
+            <span id="speed-v" style="color:var(--ink-2)">8/s</span></label>
+          <input type="range" id="scrub" min="0" max="0" value="0" title="Scrub the replay">
+          <span class="small muted" id="frame-lbl">–</span>
+        </div>
+        <div class="footnote">The replay streams one scored window per tick over a WebSocket —
+          the same code path a live NetFlow tap drives. The rest of the page stays interactive
+          while it runs.</div>
+      </div>
+    </div>
+
+    <!-- ---------- forecast ---------- -->
+    <div class="card">
+      <h2>K-step forward simulation <span class="muted" style="text-transform:none">— autoregressive rollout from the current state</span></h2>
+      <div class="ctrl">
+        <label>horizon K <input type="range" id="horizon" min="1" max="15" value="5">
+          <span id="horizon-v" style="color:var(--ink-2)">5</span></label>
+        <span class="small muted">The model feeds its own predicted next state back in at each step.</span>
+      </div>
+      <div class="tbl-wrap" style="max-height:none">
+        <table><thead><tr>
+          <th>Step</th><th>Infiltration probability</th><th>Predicted stage</th>
+          <th>MITRE tactic</th><th>Stage confidence</th>
+        </tr></thead><tbody id="forecast-body"></tbody></table>
+      </div>
+    </div>
+
+    <!-- ---------- explainability ---------- -->
+    <div class="grid g2">
+      <div class="card">
+        <h2>Attention over recent windows</h2>
+        <div id="attention" class="chart" style="height:250px"></div>
+        <div class="footnote">How much each of the last L observed windows drove the current
+          prediction. <code>t-0</code> is the newest.</div>
+      </div>
+      <div class="card">
+        <h2>Top driving features</h2>
+        <div id="saliency" class="chart" style="height:250px"></div>
+        <div class="footnote">Gradient × input saliency over the 33-dim state vector.
+          <span id="zerofill-note"></span></div>
+      </div>
+    </div>
+
+    <!-- ---------- flows ---------- -->
+    <div class="card">
+      <h2>Flows in the selected window <span class="muted" id="flow-window" style="text-transform:none"></span></h2>
+      <div class="tbl-wrap"><table id="flows"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+    <!-- ---------- live ingest ---------- -->
+    <div class="card">
+      <h2>Live ingest <span class="pill" id="live-pill">idle</span></h2>
+      <div class="ctrl">
+        <label>source <select id="live-source"><option value="default">default</option></select></label>
+        <button id="btn-live">Subscribe</button>
+        <span class="small muted">Push flows with
+          <code>POST /api/ingest</code> — or run <code>python tools/feeder.py</code>.</span>
+      </div>
+      <div id="live-chart" class="chart" style="height:200px"></div>
+      <div class="tbl-wrap" style="max-height:180px"><table id="live-tbl">
+        <thead><tr><th>#</th><th>Flows</th><th>Probability</th><th>Predicted stage</th><th>Peak over horizon</th></tr></thead>
+        <tbody></tbody></table></div>
+    </div>
+
+    <!-- ---------- MITRE ---------- -->
+    <div class="card">
+      <h2>MITRE ATT&amp;CK stage reference</h2>
+      <div class="tbl-wrap" style="max-height:none"><table id="mitre">
+        <thead><tr><th>Stage</th><th>Tactic</th><th>ID</th><th style="white-space:normal">Description</th></tr></thead>
+        <tbody></tbody></table></div>
+    </div>
+
+  </div><!-- /app -->
+</div>
+
+<script>
+// ───────────────────────── constants & helpers ─────────────────────────
+const KILL_CHAIN = ["Reconnaissance","Initial_Access","Lateral_Movement",
+                    "Command_And_Control","Exfiltration"];
+const C = {
+  surface:"#1a1a19", ink:"#ffffff", ink2:"#c3c2b7", muted:"#898781",
+  grid:"#2c2c2a", axis:"#383835",
+  s1:"#3987e5", s2:"#d95926",
+  good:"#0ca30c", warning:"#fab219", critical:"#d03b3b",
+};
+const PLOT_CFG = {displayModeBar:false, responsive:true};
+const nice = s => (s||"").replace(/_/g," ");
+// Flow records carry full float64 precision; rendering that raw makes the
+// table unreadable, so round for display only.
+function cell(v){
+  if(v === null || v === undefined) return "";
+  if(typeof v === "number" && !Number.isInteger(v))
+    return Math.abs(v) >= 1000 ? v.toFixed(1) : v.toFixed(4).replace(/0+$/,"").replace(/\.$/,"");
+  if(typeof v === "number") return v.toLocaleString();
+  return v;
+}
+const fmt  = n => n.toLocaleString();
+const pct  = v => (v*100).toFixed(1) + "%";
+const $    = id => document.getElementById(id);
+
+function baseLayout(extra={}){
+  return Object.assign({
+    paper_bgcolor:C.surface, plot_bgcolor:C.surface,
+    font:{family:'system-ui, -apple-system, "Segoe UI", sans-serif', size:12, color:C.ink2},
+    margin:{l:52,r:16,t:12,b:40},
+    hoverlabel:{bgcolor:"#232321", bordercolor:C.axis,
+                font:{color:C.ink, family:'system-ui, sans-serif', size:12}},
+    showlegend:false,
+  }, extra);
+}
+const AX = {gridcolor:C.grid, zerolinecolor:C.axis, linecolor:C.axis,
+            tickfont:{color:C.muted, size:11}, automargin:true};
+
+function banner(msg, kind="info"){
+  const b = $("banner");
+  b.className = "banner " + kind;
+  b.innerHTML = msg;
+  b.classList.remove("hidden");
+}
+
+// ───────────────────────── app state ─────────────────────────
+const S = {
+  datasets:[], session:null, meta:null, timeline:null,
+  ws:null, playing:false, frame:0, liveWs:null, live:[],
+  horizonTimer:null,
+};
+
+// ───────────────────────── boot ─────────────────────────
+(async function init(){
+  if(typeof Plotly === "undefined"){
+    banner("Charting library failed to load — <code>server/static/vendor/plotly.min.js</code> is missing. "
+         + "Re-run <code>python tools/fetch_vendor.py</code>.", "err");
+    return;
+  }
+  try{
+    const h = await (await fetch("/api/health")).json();
+    $("pill-device").textContent = h.device;
+  }catch(e){ banner("Cannot reach the API. Is the server running?","err"); return; }
+
+  S.datasets = await (await fetch("/api/datasets")).json();
+  const sel = $("dataset"), usel = $("upload-model");
+  for(const d of S.datasets){
+    const label = d.label + (d.available ? "" : " — unavailable");
+    sel.add(new Option(label, d.id, false, false));
+    usel.add(new Option(d.label, d.id));
+    if(!d.available) sel.options[sel.options.length-1].disabled = true;
+  }
+  const first = S.datasets.find(d=>d.available);
+  if(first) sel.value = first.id; else banner("No trained checkpoint found. Train one with <code>python -m netforecast.train</code>.","err");
+
+  await loadMitre();
+  $("btn-load").onclick = () => startSession();
+  $("btn-upload-toggle").onclick = () => $("upload-row").classList.toggle("hidden");
+  $("btn-upload").onclick = uploadCsv;
+  $("btn-play").onclick = togglePlay;
+  $("btn-restart").onclick = () => send({action:"restart"});
+  $("speed").oninput = e => { $("speed-v").textContent = e.target.value+"/s";
+                              send({action:"speed", value:+e.target.value}); };
+  $("scrub").oninput = e => { pause(); send({action:"seek", frame:+e.target.value}); };
+  $("horizon").oninput = e => { $("horizon-v").textContent = e.target.value;
+                                clearTimeout(S.horizonTimer);
+                                S.horizonTimer = setTimeout(refreshForecast, 180); };
+  $("btn-live").onclick = toggleLive;
+  window.addEventListener("resize", () => {
+    for(const id of ["timeline","attention","saliency","live-chart"]){
+      const el = $(id); if(el && el.data) Plotly.Plots.resize(el);
+    }
+  });
+})();
+
+async function loadMitre(){
+  const m = await (await fetch("/api/mitre")).json();
+  const tb = document.querySelector("#mitre tbody");
+  tb.innerHTML = m.stages.map(s=>{
+    const t = m.tactics[s] || {};
+    return `<tr><td class="stage">${nice(s)}</td><td>${t.tactic_name||"–"}</td>
+            <td>${t.tactic_id||"–"}</td><td style="white-space:normal">${t.description||""}</td></tr>`;
+  }).join("");
+}
+
+// ───────────────────────── session lifecycle ─────────────────────────
+async function startSession(){
+  const id = $("dataset").value;
+  const r = await fetch("/api/session", {method:"POST",
+            headers:{"content-type":"application/json"}, body:JSON.stringify({dataset:id})});
+  if(!r.ok){ banner(errText(await r.json()), "err"); return; }
+  await trackLoad((await r.json()).session_id);
+}
+
+async function uploadCsv(){
+  const f = $("file").files[0];
+  if(!f){ banner("Choose a CSV first.","err"); return; }
+  const fd = new FormData(); fd.append("file", f);
+  const r = await fetch(`/api/session/upload?dataset=${$("upload-model").value}`,
+                        {method:"POST", body:fd});
+  const j = await r.json();
+  if(!r.ok){ banner(errText(j), "err"); return; }
+  await trackLoad(j.session_id);
+}
+
+function errText(j){
+  if(j && j.missing_columns) return `Upload rejected — missing column(s): <code>${j.missing_columns.join(", ")}</code>`;
+  return (j && j.detail) ? String(j.detail) : "Request failed.";
+}
+
+async function trackLoad(sid){
+  S.session = sid;
+  $("pill-session").textContent = sid;
+  $("app").classList.add("hidden");
+  $("progress").classList.remove("hidden");
+  $("banner").classList.add("hidden");
+  closeWs();
+
+  for(;;){
+    const st = await (await fetch(`/api/session/${sid}/status`)).json();
+    $("progress-msg").textContent = st.message || st.stage;
+    $("progress-bar").style.width = (st.pct*100).toFixed(0)+"%";
+    if(st.error){
+      $("progress").classList.add("hidden");
+      banner("Load failed — " + st.error, "err");
+      return;
+    }
+    if(st.done) break;
+    await new Promise(r=>setTimeout(r,250));
+  }
+  $("progress").classList.add("hidden");
+  await renderAll(sid);
+}
+
+async function renderAll(sid){
+  S.meta     = await (await fetch(`/api/session/${sid}`)).json();
+  S.timeline = await (await fetch(`/api/session/${sid}/timeline`)).json();
+
+  const unit = S.meta.window_unit;
+  $("t-flows").textContent   = fmt(S.meta.n_rows);
+  $("t-windows").textContent = fmt(S.meta.n_windows);
+  $("t-window").innerHTML    = S.meta.window_seconds + ` <small>${unit}</small>`;
+  const peak = Math.max(...S.timeline.probability);
+  $("t-peak").textContent    = pct(peak);
+
+  $("horizon").value = S.meta.horizon_k;
+  $("horizon-v").textContent = S.meta.horizon_k;
+
+  $("zerofill-note").textContent = unit === "flows"
+    ? "On this capture the packet-level features (TTL, retransmission, fragmentation) are zero-filled and cannot rank."
+    : "";
+
+  drawTimeline();
+  drawLive();
+  $("scrub").max = Math.max(0, S.timeline.probability.length - 1);
+  await Promise.all([refreshForecast(), refreshExplain(), refreshFlows(S.meta.n_windows-1)]);
+  showFrame(S.timeline.probability.length - 1);
+
+  $("app").classList.remove("hidden");
+  openWs(sid);
+}
+
+// ───────────────────────── charts ─────────────────────────
+function drawTimeline(){
+  const tl = S.timeline;
+  const xs = tl.t, ys = tl.probability;
+  const unit = S.meta.window_unit === "flows" ? "flow #" : "time (s)";
+  Plotly.react("timeline", [
+    {   // threshold bands read as background, so they sit behind the series
+      x:[xs[0], xs[xs.length-1]], y:[1,1], type:"scatter", mode:"lines",
+      line:{width:0}, fill:"tozeroy", fillcolor:"rgba(208,59,59,0.05)",
+      hoverinfo:"skip", showlegend:false,
+    },
+    {
+      x:xs, y:ys, type:"scatter", mode:"lines", name:"Infiltration probability",
+      line:{color:C.s1, width:2, shape:"spline", smoothing:0.4},
+      fill:"tozeroy", fillcolor:"rgba(57,135,229,0.14)",
+      hovertemplate:"%{y:.1%}<br><span style='color:#898781'>"+unit+" %{x:,}</span><extra></extra>",
+    },
+    {
+      x:[], y:[], type:"scatter", mode:"markers", name:"cursor",
+      marker:{color:C.s2, size:11, line:{color:C.surface, width:2}},
+      hoverinfo:"skip",
+    },
+  ], baseLayout({
+    xaxis:Object.assign({}, AX, {title:{text:unit, font:{color:C.muted, size:11}}}),
+    yaxis:Object.assign({}, AX, {range:[0,1], tickformat:".0%",
+           title:{text:"infiltration probability", font:{color:C.muted, size:11}}}),
+    hovermode:"x unified",
+    shapes:[{type:"line", x0:xs[0], x1:xs[xs.length-1], y0:0.66, y1:0.66,
+             line:{color:C.critical, width:1, dash:"dot"}}],
+    annotations:[{x:xs[xs.length-1], y:0.66, xanchor:"right", yanchor:"bottom",
+                  text:"HIGH threshold", showarrow:false,
+                  font:{color:C.critical, size:10}}],
+  }), PLOT_CFG);
+}
+
+// A hand-built SVG arc rather than a Plotly indicator: the gauge is the hero
+// visual, and an explicit arc removes Plotly's indicator sizing quirks entirely
+// (its indicator clipped its own right half inside the sidebar column).
+const G = {r:78, w:15, cx:110, cy:100};
+const gpt = (f, r) => {                       // fraction 0..1 along a 180 deg arc
+  const a = Math.PI * (1 - Math.max(0, Math.min(1, f)));
+  return [G.cx + r*Math.cos(a), G.cy - r*Math.sin(a)];
+};
+function arc(f0, f1, r){
+  const [x0,y0] = gpt(f0, r), [x1,y1] = gpt(f1, r);
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${(f1-f0) > 0.5 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+function drawGauge(prob, band){
+  const col = band==="HIGH" ? C.critical : band==="MEDIUM" ? C.warning : C.good;
+  const [tx0,ty0] = gpt(0.66, G.r - G.w/2 - 1), [tx1,ty1] = gpt(0.66, G.r + G.w/2 + 1);
+  $("gauge").innerHTML = `
+  <svg viewBox="0 0 220 132" width="100%" height="100%" role="img"
+       aria-label="Infiltration risk ${pct(prob)} — ${band}">
+    <path d="${arc(0,1,G.r)}"       fill="none" stroke="#232321" stroke-width="${G.w}" stroke-linecap="round"/>
+    <path d="${arc(0,0.33,G.r)}"    fill="none" stroke="rgba(12,163,12,.22)"  stroke-width="${G.w}"/>
+    <path d="${arc(0.33,0.66,G.r)}" fill="none" stroke="rgba(250,178,25,.22)" stroke-width="${G.w}"/>
+    <path d="${arc(0.66,1,G.r)}"    fill="none" stroke="rgba(208,59,59,.22)"  stroke-width="${G.w}"/>
+    ${prob > 0.004 ? `<path d="${arc(0,prob,G.r)}" fill="none" stroke="${col}"
+          stroke-width="${G.w}" stroke-linecap="round"/>` : ""}
+    <line x1="${tx0.toFixed(2)}" y1="${ty0.toFixed(2)}" x2="${tx1.toFixed(2)}" y2="${ty1.toFixed(2)}"
+          stroke="${C.critical}" stroke-width="2"/>
+    <text x="${G.cx}" y="${G.cy - 6}" text-anchor="middle" fill="${C.ink}"
+          font-size="30" font-weight="600" font-family="inherit">${(prob*100).toFixed(1)}%</text>
+    <text x="${G.cx}" y="${G.cy + 14}" text-anchor="middle" fill="${C.muted}"
+          font-size="10" letter-spacing=".07em" font-family="inherit">INFILTRATION RISK</text>
+    <text x="${G.cx - G.r}" y="${G.cy + 18}" text-anchor="middle" fill="${C.muted}"
+          font-size="10" font-family="inherit">0%</text>
+    <text x="${G.cx + G.r}" y="${G.cy + 18}" text-anchor="middle" fill="${C.muted}"
+          font-size="10" font-family="inherit">100%</text>
+  </svg>`;
+}
+
+function drawBars(el, labels, values, color, horizontal){
+  const t = horizontal
+    ? {x:values, y:labels, orientation:"h"}
+    : {x:labels, y:values};
+  Plotly.react(el, [Object.assign({
+      type:"bar", marker:{color, line:{width:0}},
+      hovertemplate:"%{"+(horizontal?"y":"x")+"}<br><b>%{"+(horizontal?"x":"y")+":.4f}</b><extra></extra>",
+    }, t)],
+    baseLayout({
+      margin:horizontal?{l:150,r:20,t:8,b:36}:{l:52,r:16,t:8,b:40},
+      bargap:0.35,
+      xaxis:Object.assign({}, AX, horizontal?{}:{tickangle:0}),
+      yaxis:Object.assign({}, AX, horizontal?{autorange:"reversed"}:{}),
+    }), PLOT_CFG);
+}
+
+// ───────────────────────── panels ─────────────────────────
+async function refreshForecast(){
+  if(!S.session) return;
+  const k = $("horizon").value;
+  const f = await (await fetch(`/api/session/${S.session}/forecast?k=${k}`)).json();
+  drawGauge(f.overall_infiltration_risk, f.risk_band);
+  const b = $("risk-badge");
+  b.className = "badge b-" + f.risk_band;
+  b.textContent = f.risk_band;
+  $("risk-note").textContent = `peak across the next ${f.horizon_k} windows`;
+
+  $("forecast-body").innerHTML = f.forecast.map(s=>`
+    <tr><td>${s.step}</td><td>${pct(s.infiltration_probability)}</td>
+    <td class="stage">${nice(s.predicted_stage)}</td>
+    <td>${s.mitre_tactic.tactic_id} ${s.mitre_tactic.tactic_name}</td>
+    <td>${pct(s.stage_confidence)}</td></tr>`).join("");
+
+  const worst = f.forecast.reduce((a,s)=>
+    KILL_CHAIN.indexOf(s.predicted_stage) > KILL_CHAIN.indexOf(a) ? s.predicted_stage : a, "Benign");
+  setChain(worst);
+}
+
+async function refreshExplain(win){
+  if(!S.session) return;
+  const q = win==null ? "" : `?window=${win}`;
+  const e = await (await fetch(`/api/session/${S.session}/explain${q}`)).json();
+  drawBars("attention", e.attention.map(a=>a.context_step), e.attention.map(a=>a.weight),
+           C.s1, false);
+  drawBars("saliency", e.top_features.map(f=>f.feature), e.top_features.map(f=>f.saliency),
+           C.s2, true);
+}
+
+async function refreshFlows(win){
+  if(!S.session) return;
+  const r = await (await fetch(`/api/session/${S.session}/flows?window=${win}&limit=50`)).json();
+  $("flow-window").textContent = `— window ${r.window}, ${fmt(r.total_in_window)} flow(s)`;
+  const t = $("flows");
+  t.querySelector("thead").innerHTML =
+    "<tr>" + r.columns.map(c=>`<th>${c}</th>`).join("") + "</tr>";
+  t.querySelector("tbody").innerHTML = r.rows.length
+    ? r.rows.map(row=>"<tr>"+r.columns.map(c=>`<td>${cell(row[c])}</td>`).join("")+"</tr>").join("")
+    : `<tr><td colspan="${r.columns.length}" class="muted">No flows in this window.</td></tr>`;
+}
+
+function setChain(stage){
+  const idx = KILL_CHAIN.indexOf(stage);
+  $("chain").innerHTML = KILL_CHAIN.map((s,i)=>
+    `<div class="step ${i<=idx?"on":""}"><span class="dot"></span>
+       <span class="lbl">${nice(s)}</span><span class="idx">${i+1}/5</span></div>`
+  ).join("");
+  $("chain-note").textContent = idx < 0
+    ? "No kill-chain stage predicted — traffic reads as benign."
+    : `Predicted progression reaches ${nice(KILL_CHAIN[idx])}.`;
+}
+
+// ───────────────────────── replay over WebSocket ─────────────────────────
+function openWs(sid){
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws/replay/${sid}`);
+  S.ws = ws;
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if(m.type === "ready"){ $("scrub").max = Math.max(0, m.n_frames-1); }
+    else if(m.type === "frame"){ onFrame(m); }
+    else if(m.type === "complete"){ setPlaying(false); }
+    else if(m.type === "error"){ banner(m.message,"err"); }
+  };
+  ws.onclose = () => { S.ws = null; setPlaying(false); };
+}
+function closeWs(){ if(S.ws){ S.ws.close(); S.ws = null; } }
+function send(m){ if(S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(m)); }
+function pause(){ if(S.playing){ send({action:"pause"}); setPlaying(false);} }
+function togglePlay(){ S.playing ? (send({action:"pause"}), setPlaying(false))
+                                 : (send({action:"play"}),  setPlaying(true)); }
+function setPlaying(v){
+  S.playing = v;
+  $("btn-play").textContent = v ? "⏸ Pause" : "▶ Play replay";
+}
+
+function onFrame(m){
+  S.frame = m.frame;
+  $("scrub").value = m.frame;
+  showFrame(m.frame, m);
+  if(m.flows) renderFlowRows(m.flows, m.window_index, m.n_flows);
+}
+
+function showFrame(i, m){
+  const tl = S.timeline;
+  if(!tl || !tl.probability.length) return;
+  i = Math.max(0, Math.min(i, tl.probability.length-1));
+  const prob  = m ? m.probability : tl.probability[i];
+  const stage = m ? m.stage : tl.stage[i];
+  const band  = m ? m.band : (prob>0.66?"HIGH":prob>0.33?"MEDIUM":"LOW");
+
+  // update only the cursor trace — no figure rebuild, so the payload stays flat
+  Plotly.restyle("timeline", {x:[[tl.t[i]]], y:[[prob]]}, [2]);
+
+  const unit = S.meta.window_unit === "flows" ? "flow" : "t";
+  $("frame-lbl").textContent =
+    `frame ${i+1}/${tl.probability.length} · window ${tl.window_index[i]} · ${unit} ${fmt(tl.t[i])} · ${pct(prob)} · ${nice(stage)}`;
+
+  if(m){
+    drawGauge(prob, band);
+    const b = $("risk-badge"); b.className = "badge b-"+band; b.textContent = band;
+    $("risk-note").textContent = `window ${m.window_index}`;
+    setChain(stage);
+  }
+}
+
+function renderFlowRows(rows, win, total){
+  const t = $("flows");
+  if(!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  $("flow-window").textContent = `— window ${win}, ${fmt(total)} flow(s)`;
+  t.querySelector("thead").innerHTML = "<tr>"+cols.map(c=>`<th>${c}</th>`).join("")+"</tr>";
+  t.querySelector("tbody").innerHTML =
+    rows.map(r=>"<tr>"+cols.map(c=>`<td>${cell(r[c])}</td>`).join("")+"</tr>").join("");
+}
+
+// ───────────────────────── live ingest ─────────────────────────
+function toggleLive(){
+  if(S.liveWs){ S.liveWs.close(); return; }
+  const src = $("live-source").value;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws/live/${src}`);
+  S.liveWs = ws;
+  $("btn-live").textContent = "Disconnect";
+  $("live-pill").textContent = "connecting"; $("live-pill").className = "pill";
+
+  ws.onopen = () => { $("live-pill").textContent = "listening"; $("live-pill").className = "pill live"; };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if(m.type === "ready" || m.type === "snapshot"){
+      S.live = (m.recent||[]).slice(-200);
+    } else if(m.type === "live_window"){
+      S.live.push(m); if(S.live.length > 200) S.live.shift();
+    }
+    drawLive();
+  };
+  ws.onclose = () => {
+    S.liveWs = null; $("btn-live").textContent = "Subscribe";
+    $("live-pill").textContent = "idle"; $("live-pill").className = "pill";
+  };
+}
+
+function drawLive(){
+  const xs = S.live.map(w=>w.seq), ys = S.live.map(w=>w.probability);
+  const empty = xs.length === 0;
+  Plotly.react("live-chart", [{
+    x:xs, y:ys, type:"scatter", mode:"lines+markers", name:"live risk",
+    line:{color:C.good, width:2}, marker:{size:5, color:C.good},
+    fill:"tozeroy", fillcolor:"rgba(12,163,12,0.12)",
+    hovertemplate:"window %{x}<br><b>%{y:.1%}</b><extra></extra>",
+  }], baseLayout({
+    xaxis:Object.assign({}, AX, {title:{text:"ingested window", font:{color:C.muted,size:11}},
+                                 range: empty ? [0,10] : undefined}),
+    yaxis:Object.assign({}, AX, {range:[0,1], tickformat:".0%"}),
+    margin:{l:52,r:16,t:8,b:40},
+    annotations: empty ? [{text:"No flows ingested yet — subscribe, then run "
+                                + "<i>python tools/feeder.py</i>",
+                           showarrow:false, xref:"paper", yref:"paper", x:0.5, y:0.5,
+                           font:{color:C.muted, size:12}}] : [],
+  }), PLOT_CFG);
+
+  document.querySelector("#live-tbl tbody").innerHTML = S.live.slice(-30).reverse().map(w=>
+    `<tr><td>${w.seq}</td><td>${w.n_flows}</td><td>${pct(w.probability)}</td>
+     <td class="stage">${nice(w.stage)}</td><td>${pct(w.overall_risk)}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted">Waiting for flows…</td></tr>`;
+}
+</script>
+</body>
+</html>

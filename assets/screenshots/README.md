@@ -1,48 +1,77 @@
 # Project Screenshots
 
-Screenshots of the Streamlit demo (`streamlit run demo/app.py`, CIC-IDS2017 real-dataset checkpoint).
+Captured from the NetForecast dashboard (`uvicorn server.main:app`), synthetic
+campaign capture, 2× device scale.
+
+Regenerate them all with the server running:
+
+```bash
+uvicorn server.main:app --port 8000
+# then drive the page with your browser, or re-run the capture script used for these
+```
+
+## 00-dashboard.png
+The full dashboard in one shot — stat tiles, risk gauge, kill-chain stepper,
+probability timeline with replay controls, K-step forecast, explainability,
+flow drill-down, live-ingest panel and the MITRE reference.
+
+![00-dashboard](00-dashboard.png)
 
 ## 01-overview.png
-Section 1 — Ingested traffic overview. Flow count, time-window count, and window size for the loaded file.
+Ingested-traffic tiles: flow count, window count, window size (labelled with its
+real unit — seconds or flows) and peak risk across the capture.
 
 ![01-overview](01-overview.png)
 
 ## 02-timeline.png
-Section 2 — Rolling infiltration-probability timeline across the whole file. Each spike corresponds to a real attack campaign in the data.
+Infiltration probability across the whole capture, with the HIGH threshold
+marked. Each plateau is a real attack campaign in the data.
 
 ![02-timeline](02-timeline.png)
 
 ## 03-live-replay-gauge.png
-Live Replay Simulation — the risk gauge and MITRE kill-chain stepper updating window-by-window, as if the traffic were arriving live.
+Current risk gauge and the MITRE kill-chain stepper. The gauge bands are the
+LOW/MEDIUM/HIGH status colours; the tick marks the HIGH threshold.
 
 ![03-live-replay-gauge](03-live-replay-gauge.png)
 
 ## 04-live-replay-result.png
-Live Replay Simulation — completed run: the probability-over-time chart plus the raw flows in the final replayed window.
+Mid-replay. Windows stream over a WebSocket one per tick; the gauge, stepper,
+timeline cursor and flow table all update while the rest of the page stays
+interactive.
 
 ![04-live-replay-result](04-live-replay-result.png)
 
 ## 05-rollout.png
-Section 3 — Current-state K-step forward simulation. Per-step infiltration probability, predicted MITRE stage, and confidence, K windows ahead.
+K-step forward simulation: the autoregressive rollout, per-step infiltration
+probability, predicted MITRE stage and tactic, and stage confidence.
 
 ![05-rollout](05-rollout.png)
 
 ## 06-attention.png
-Section 4 — Explainability: attention weights over the last L observed time windows.
+Attention weights over the last L observed windows — which past windows drove
+the current prediction.
 
 ![06-attention](06-attention.png)
 
 ## 07-saliency.png
-Section 5 — Explainability: top driving features (gradient×input saliency) behind the current risk score.
+Gradient×input saliency over the 33-dim state vector — which traffic features
+drove the risk score.
 
 ![07-saliency](07-saliency.png)
 
 ## 08-flagged-flows.png
-Section 6 — Flagged flows in the current window, for analyst drill-down.
+Per-window flow drill-down for analyst inspection.
 
 ![08-flagged-flows](08-flagged-flows.png)
 
 ## 09-mitre-reference.png
-MITRE ATT&CK stage reference — tactic IDs and descriptions for each of the 6 kill-chain stages the model predicts.
+The stage → MITRE ATT&CK tactic reference table served from `/api/mitre`.
 
 ![09-mitre-reference](09-mitre-reference.png)
+
+## 10-live-ingest.png
+Live ingest: flow batches arriving over `POST /api/ingest` from an external
+collector, windowed, scored and pushed to the dashboard in real time.
+
+![10-live-ingest](10-live-ingest.png)

@@ -1,15 +1,25 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.streamlit/
+
+# Large source captures: regenerate with `python -m netforecast.simulate_traffic`
+# or download CIC-IDS2017 and run `python -m netforecast.real_data_adapter`.
 data/*.csv
 data/*.npz
 data/raw/
 !data/.gitkeep
-models/*.pt
-models/*.joblib
-models/*.npz
-!models/.gitkeep
-models_real/*.pt
-models_real/*.joblib
-models_real/*.npz
-.streamlit/
+# The small bundled sample IS committed, so a fresh clone can run the demo
+# with no downloads at all.
+!data/sample_flows.csv
+
+# Trained artifacts ARE committed -- they are small (a checkpoint is ~360 KB)
+# and without them a clone cannot run the demo or reproduce the benchmark.
+# Only the random-forest baselines are excluded, at 9 MB / 31 MB.
+models/baseline_rf.joblib
+models_real/baseline_rf.joblib

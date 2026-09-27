@@ -1,9 +1,10 @@
-numpy
-pandas
-scikit-learn
-torch
-streamlit
-shap
-matplotlib
-plotly
-joblib
+# Runtime dependencies. Versions are pinned to ranges that were actually tested,
+# so a fresh clone reproduces the demo rather than resolving to whatever is cached.
+numpy>=1.26,<3
+pandas>=2.1,<3
+scikit-learn>=1.4,<2
+torch>=2.2,<3
+joblib>=1.3,<2
+fastapi>=0.110,<1
+uvicorn[standard]>=0.27,<1
+python-multipart>=0.0.9

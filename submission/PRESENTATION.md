@@ -55,7 +55,7 @@ SIH26153, National Technical Research Organisation (NTRO).
 - Multi-task world model (dynamics + stage + infiltration heads),
   K-step forecasting, built-in explainability, offline demo,
   baseline-benchmarked.
-- Stack: PyTorch, scikit-learn, SHAP, pandas/NumPy, Streamlit, Python.
+- Stack: PyTorch, scikit-learn, pandas/NumPy, FastAPI + WebSockets, Plotly, Python.
 
 ## Slide 9 — Future Scope
 - Graph-based per-host state with a GNN encoder for larger topologies.

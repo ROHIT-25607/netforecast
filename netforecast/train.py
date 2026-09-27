@@ -16,11 +16,17 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from dataset import (NetworkStateSequenceDataset, chronological_split, day_aware_split,
-                      CONTEXT_LEN, HORIZON_K)
-from features import build_state_sequence, normalize_states, N_FEATURES
-from mitre_mapping import STAGES
-from world_model import WorldModel
+from .dataset import (
+    CONTEXT_LEN,
+    HORIZON_K,
+    NetworkStateSequenceDataset,
+    chronological_split,
+    day_aware_split,
+    resolve_data_path,
+)
+from .features import N_FEATURES, build_state_sequence
+from .mitre_mapping import STAGES
+from .world_model import WorldModel
 
 SEED = 42
 
@@ -89,7 +95,7 @@ def main():
     print(f"Built {len(states)} time windows of {states.shape[1]} features each.")
 
     if args.day_boundaries:
-        with open(args.day_boundaries) as f:
+        with open(resolve_data_path(args.day_boundaries)) as f:
             day_info = json.load(f)
         train_windows, val_windows, test_windows = day_aware_split(
             day_info["row_counts_per_day"], args.window_seconds)

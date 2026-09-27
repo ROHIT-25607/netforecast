@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netforecast"
+version = "1.0.0"
+description = "AI world model for network attack forecasting, mapped to MITRE ATT&CK"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "numpy>=1.26,<3",
+    "pandas>=2.1,<3",
+    "scikit-learn>=1.4,<2",
+    "torch>=2.2,<3",
+    "joblib>=1.3,<2",
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.27,<1",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.4",
+    "matplotlib>=3.8",
+    "shap>=0.45",
+]
+
+[project.scripts]
+netforecast-serve = "server.main:run"
+
+[tool.setuptools]
+packages = ["netforecast", "server", "server.routers"]
+
+[tool.setuptools.package-data]
+server = ["static/*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

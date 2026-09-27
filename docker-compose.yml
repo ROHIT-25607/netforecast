@@ -1,0 +1,13 @@
+services:
+  netforecast:
+    build: .
+    image: netforecast:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # Force CPU; set to "cuda" only if the image is rebuilt with a CUDA wheel.
+      NETFORECAST_DEVICE: cpu
+    volumes:
+      # Optional: mount your own captures to score them from the dashboard.
+      - ./data:/app/data:ro
+    restart: unless-stopped

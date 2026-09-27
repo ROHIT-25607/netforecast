@@ -20,8 +20,6 @@ matter of writing a small column-renaming adapter (see README).
 import numpy as np
 import pandas as pd
 
-from mitre_mapping import STAGES
-
 RNG_SEED = 42
 
 COLUMNS = [

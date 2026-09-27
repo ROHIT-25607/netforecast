@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from mitre_mapping import STAGE_TO_ID, stage_severity, ID_TO_STAGE
+from .mitre_mapping import ID_TO_STAGE, STAGE_TO_ID, stage_severity
 
 CONTEXT_LEN = 10   # L: number of past windows fed to the model
 HORIZON_K = 5      # K: number of future windows for infiltration forecast
@@ -91,3 +91,25 @@ def day_aware_split(day_row_counts, window_flow_count, train_frac=0.7, val_frac=
         test_idx.extend(day_windows[n_train + n_val:])
         cursor += n_windows
     return sorted(train_idx), sorted(val_idx), sorted(test_idx)
+
+
+def resolve_data_path(path: str) -> str:
+    """Resolve a path recorded in a `config.json`, wherever it is run from.
+
+    Checkpoints written by earlier runs stored paths like
+    ``../data/x.json`` -- relative to the old ``src/`` working directory, so
+    they break everywhere else. Try the literal path first, then the same name
+    relative to the repository root, then the bare filename under ``data/``.
+    """
+    import os
+
+    if os.path.exists(path):
+        return path
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for cand in (os.path.join(root, path.lstrip("./").removeprefix("../")),
+                 os.path.join(root, "data", os.path.basename(path))):
+        if os.path.exists(cand):
+            return cand
+    raise FileNotFoundError(
+        f"{path!r} (recorded in a model config) could not be found, including "
+        f"relative to the repository root {root!r}")

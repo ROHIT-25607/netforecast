@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install (CPU-only torch)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.2,<3"
+          pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check netforecast server tools tests
+
+      - name: Test
+        run: pytest -q
+
+      - name: Checkpoints must not have changed
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, sys
+          # The shipped weights are frozen: the normalization statistics baked
+          # into them were fit on specific feature values, so an accidental
+          # retrain or a feature-pipeline drift must fail the build.
+          EXPECTED = {
+            "models/world_model.pt":
+              "a4351f08b8a9d7a0a25c50d8e98b77af3a0aa530ee0acc1a0837f2f5f7a2bb4b",
+            "models_real/world_model.pt":
+              "549b26c13f08d21b04c2dfd69221b1c6574169d6427b88061bd8883d884406fe",
+            "models/norm_stats.npz":
+              "dce95e908e9971a32e4f24e966541d1ec8259863c6721fd1197b1a5b1e2c617c",
+            "models_real/norm_stats.npz":
+              "eeb6ea26b8060d9522cf615f12c08634b120d0a0d7dc7613e997428c8242428e",
+          }
+          bad = []
+          for path, want in EXPECTED.items():
+              p = pathlib.Path(path)
+              got = hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else "MISSING"
+              if got != want:
+                  bad.append(f"{path}: expected {want[:16]}..., got {got[:16]}...")
+          if bad:
+              print("\n".join(bad)); sys.exit(1)
+          print("All frozen checkpoints verified.")
+          PY

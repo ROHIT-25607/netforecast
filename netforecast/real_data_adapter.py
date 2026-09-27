@@ -29,14 +29,13 @@ also see README "Using the real CIC-IDS2017 dataset"):
     Exfiltration), so mapping them in would misrepresent the taxonomy.
 """
 import argparse
-import glob
 import json
 import os
 
 import numpy as np
 import pandas as pd
 
-from simulate_traffic import COLUMNS
+from .simulate_traffic import COLUMNS
 
 # Chronological order of the 8 daily CIC-IDS2017 CSVs (Mon -> Fri).
 FILE_ORDER = [

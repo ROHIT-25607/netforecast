@@ -104,31 +104,83 @@ For the logistic-regression baseline, `explain.py` additionally computes
 
 ## 6. Benchmark methodology & results
 
-`baseline.py` trains a logistic regression on the *identical* flattened
-L-step context window and K-step infiltration label used by the world
-model, so the comparison isolates the value of the learned recurrent
-dynamics rather than differences in features or horizon. Both models are
-evaluated on the same chronologically-held-out, strictly-future test
-split (`dataset.chronological_split`, cached in
-`models/split_indices.npz`) — no shuffling, so the test period is truly
-unseen. `evaluate.py` reports precision, recall, F1 and false-positive
-rate for both and writes `reports/benchmark.md`.
+`baseline.py` trains **two** baselines on the *identical* flattened L-step
+context window and K-step infiltration label used by the world model, so the
+comparison isolates the value of the learned recurrent dynamics rather than
+differences in features or horizon:
 
-**Results on real CIC-IDS2017 traffic** (`reports/benchmark_cicids2017.md`):
+- a class-balanced **logistic regression** (the linear reference), and
+- a **random forest** (a strong non-linear reference on the same 330-dim input).
 
-| Model | Precision | Recall | F1 | False Positive Rate |
-|---|---|---|---|---|
-| Logistic Regression (baseline) | 0.313 | 0.780 | 0.447 | 0.828 |
-| **LSTM World Model** | **0.842** | 0.823 | **0.832** | **0.075** |
+The random forest matters. On CIC-IDS2017 the logistic regression is close to
+degenerate — it fires on 83% of benign windows and its ROC-AUC of 0.461 is
+*below chance* — so "we beat the baseline" would be a meaningless claim against
+it alone. A tuned tree ensemble is the comparison a reviewer will actually ask
+for, and it is the one reported as the headline delta.
 
-The world model's F1 is nearly double the baseline's, with an order of
-magnitude fewer false positives — evidence that learning the traffic's
-temporal dynamics, not just its per-window features, is what drives
-reliable forecasting on real attack traffic.
+### Splits
+
+- **Synthetic** uses `dataset.chronological_split`: a single strictly-future cut,
+  no shuffling.
+- **CIC-IDS2017** uses `dataset.day_aware_split`: chronological *within* each
+  capture day, then unioned. This is **not** one strictly-future cut, and the
+  distinction matters. Each CIC-IDS2017 day is a largely single-attack-family
+  capture, so a global cut would place whole attack families exclusively in test,
+  giving the model zero training exposure to them. The cost is that train and test
+  interleave across days; windows adjacent to a within-day cut share overlapping
+  context, so some temporal leakage is possible. We take that trade deliberately
+  and state it rather than describing the split as strictly-future.
+
+`evaluate.py` reports precision/recall/F1/FPR, ROC-AUC and PR-AUC, a threshold
+sweep, forecast quality at each rollout horizon, lead-time statistics, a rollout
+ablation and a latency profile, and writes `reports/benchmark*.md` plus ROC/PR
+curve PNGs.
+
+**Results on real CIC-IDS2017 traffic** (`reports/benchmark_cicids2017.md`,
+1,841 held-out windows, 32.6% positive):
+
+| Model | Precision | Recall | F1 | FPR | ROC-AUC |
+|---|---|---|---|---|---|
+| Logistic Regression | 0.313 | 0.780 | 0.447 | 0.828 | 0.461 |
+| Random Forest | 0.956 | 0.653 | 0.776 | **0.015** | **0.947** |
+| **LSTM World Model** | 0.842 | 0.823 | **0.832** | 0.075 | 0.898 |
+
+The world model wins on F1 by **+0.056** over the strongest baseline, and the
+reason is balance rather than raw separability: the random forest is highly
+precise but misses 35% of attack windows. In a SOC that is the expensive error.
+We report the forest's *higher* ROC-AUC rather than omitting it — it ranks well
+but cannot be thresholded into usable recall.
+
+### Forecast quality vs horizon — the world-model claim
+
+Every number above comes from a single forward pass over *observed* context,
+which is exactly what a plain sequence classifier does. The differentiating
+claim is the **autoregressive rollout**, so it is measured separately: at step
+*s* the model has fed its own predicted state back in *s−1* times and has seen
+no new traffic.
+
+| Horizon | t+1 | t+2 | t+3 | t+4 | t+5 |
+|---|---|---|---|---|---|
+| F1 | 0.837 | 0.818 | 0.791 | 0.740 | 0.675 |
+| ROC-AUC | 0.926 | 0.910 | 0.884 | 0.858 | 0.826 |
+
+Against the same label, the single forward pass scores F1 0.832 and the 5-step
+rollout scores 0.675 — **81% retention** while running four of its five steps on
+self-generated state. Degradation with horizon is expected and is the signature
+of genuine autoregressive dynamics; a model that had only memorised a
+current-window mapping would collapse immediately once fed its own output.
+
+### Lead time
+
+Of 41 attack-episode onsets assessable within the held-out period, the model was
+already above threshold **before the first malicious flow was recorded** in 20
+(49%), median 1 window (200 flows), maximum 6 windows (1,200 flows). Lead is
+measured against the *labelled* onset, so this is warning issued before the
+attack traffic exists in the capture — not merely before an analyst noticed.
 
 ### CIC-IDS2017 adapter — schema differences & how they were handled
 
-The project ships a working adapter (`src/real_data_adapter.py`) for
+The project ships a working adapter (`netforecast/real_data_adapter.py`) for
 **CIC-IDS2017** (the 8 daily CICFlowMeter CSVs — e.g. Kaggle "Network
 Intrusion dataset (CIC-IDS-2017)" by chethuhn). This CSV export does
 **not** include IP addresses, protocol, wall-clock timestamps, or
@@ -167,17 +219,58 @@ PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
 ## 7. Deployment & scaling notes
 
 - The whole pipeline runs offline/on-prem: feature extraction, model
-  inference and the Streamlit UI have no external network calls, meeting
-  the CII (Critical Information Infrastructure) requirement of no
-  cloud-API dependency.
+  inference, the API and the dashboard make no external network calls,
+  meeting the CII (Critical Information Infrastructure) requirement of no
+  cloud-API dependency. The dashboard's charting library is **vendored**
+  under `server/static/vendor/` rather than loaded from a CDN, so the tool
+  renders correctly on an air-gapped network — a CDN `<script>` tag would
+  have quietly broken exactly the deployment this is pitched for.
+
+### Service architecture
+
+```
+              ┌───────────────────────────────────────────────┐
+  CSV upload  │  FastAPI (server/)                            │
+  ───────────▶│                                               │
+              │  SessionStore ── states, WindowIndex,         │
+  Collector   │                  downcast display frame       │
+  ───────────▶│  IngestEngine ── rolling buffer per source    │
+  POST        │                                               │
+  /api/ingest │  REST  /api/session /timeline /forecast       │
+              │        /explain /flows /state /mitre          │
+              │  WS    /ws/replay/{id}   /ws/live/{src}       │
+              └────────────────┬──────────────────────────────┘
+                               │  JSON + WebSocket frames
+                               ▼
+                   SOC dashboard (server/static)
+```
+
+Three properties matter for scale:
+
+- **A session never holds the ingested DataFrame.** It keeps the state matrix,
+  a flat `WindowIndex` of row offsets, and a downcast display frame of only the
+  columns the flow panels render. A 2.45M-row CIC-IDS2017 session costs ~80 MB
+  resident instead of ~1.0 GB, and no request deep-copies it.
+- **The risk timeline is one batched forward pass**, not one pass per anchor.
+- **Replay sleeps in the event loop**, not on the request thread, so the rest of
+  the dashboard stays interactive while a capture streams.
+
+- The `POST /api/ingest` endpoint is the seam a production deployment
+  attaches a real collector to. It accepts flow batches, maintains a rolling
+  per-source buffer, closes a window either on wall clock or on flow count
+  (matching whichever the active checkpoint was trained with), scores it and
+  pushes the result to subscribed dashboards. `tools/feeder.py` exercises this
+  path end-to-end; swapping it for a NetFlow/IPFIX collector, a Zeek `conn.log`
+  tail or a Kafka consumer changes nothing downstream.
 - For enterprise-scale deployment, `features.py`'s single aggregated
   state vector would be replaced with a per-segment or per-host state and
   the LSTM encoder replaced/augmented with a GNN over a host-interaction
   graph (nodes = hosts, edges = active flows) — the model heads and
   rollout logic in `predict.py` are unchanged by this swap.
-- Ingest can be extended from CSV batch files to a streaming feature
-  pipeline (e.g. windowed aggregation over a Kafka/NetFlow collector feed)
-  without touching the model.
+- Feature extraction is fully vectorized (single-pass grouped aggregation
+  rather than a Python loop over per-window frames): ~280x faster than the
+  original implementation, which is what makes windowing a 2.45M-flow capture
+  a ~4 s operation instead of a multi-minute one.
 
 ## 8. Honesty / scope notes
 
@@ -192,6 +285,28 @@ PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
   monitored segment per time window. A natural extension is a per-host
   graph state with a GNN encoder for larger enterprise topologies (§7).
 - K-step rollout accumulates model error autoregressively, as in any
-  latent-dynamics/world-model rollout; `evaluate.py` reports metrics at
-  the trained horizon K to keep this honest rather than cherry-picking
-  short horizons.
+  latent-dynamics/world-model rollout. `evaluate.py` now reports metrics at
+  **every** horizon step, so the degradation is visible rather than implied:
+  F1 falls from 0.837 at t+1 to 0.675 at t+5 on real traffic.
+- **On synthetic data the world model does not beat a random forest**
+  (F1 0.938 vs 0.941). The generator is close to trivially separable, so the
+  baselines saturate and the comparison carries little information. The
+  CIC-IDS2017 result is the one that means something. We ship the synthetic
+  benchmark anyway rather than quietly dropping an unflattering number.
+- **Roughly 9 of the 33 state features are constant zeros on CIC-IDS2017**
+  (TTL mean/variance, retransmission rate, fragmentation rate, and the
+  IP-derived ratios, since the adapter substitutes placeholder addresses). The
+  saliency panel on the real checkpoint therefore ranks a genuinely narrower
+  feature set than on the synthetic one, and any claim about, say, TTL variance
+  driving a real-data prediction would be false.
+- **`window_seconds: 200` on the real checkpoint counts flows, not seconds.**
+  CIC-IDS2017 carries no usable wall clock, so the adapter uses row order as the
+  chronology proxy. The API exposes `window_unit` on every dataset and session so
+  that nothing in the UI or the reports describes a flow count as a duration.
+- **The Exfiltration stage has zero training examples on CIC-IDS2017**, and the
+  adapter drops DoS/DDoS rows entirely. The 6-way stage head can still emit
+  Exfiltration on the real checkpoint; that particular output is not
+  evidence-backed and should not be presented as a detection.
+- **Best-F1 thresholds reported in the benchmarks are selected on the test
+  split.** They are an upper bound on achievable operating-point quality; a real
+  deployment would tune the threshold on validation data.
