@@ -35,6 +35,14 @@ class DatasetSpec:
     #: about a number that is not seconds.
     window_unit: str
     description: str
+    #: Whether the committed synthetic sample is a valid stand-in when this
+    #: dataset's own capture is absent. Only true for datasets that share the
+    #: sample's schema *and* windowing semantics -- scoring synthetic flows with
+    #: a model trained on 200-flow windows and real-capture norm stats produces
+    #: confident nonsense, which is worse than an honest "unavailable".
+    fallback_to_sample: bool = True
+    #: Shown when the capture is missing, so the gap is actionable.
+    obtain: str = ""
 
     @property
     def available(self) -> bool:
@@ -57,6 +65,8 @@ DATASETS: dict[str, DatasetSpec] = {
         window_unit="seconds",
         description="48h of generated traffic with injected multi-stage kill-chain campaigns. "
                     "All 33 state features are populated.",
+        fallback_to_sample=True,
+        obtain="python -m netforecast.simulate_traffic --out data/synthetic_flows.csv",
     ),
     "cicids2017": DatasetSpec(
         id="cicids2017",
@@ -67,6 +77,13 @@ DATASETS: dict[str, DatasetSpec] = {
         description="Real benign+attack capture, 2.45M flows. Packet-level features "
                     "(TTL, retransmission, fragmentation) are not recoverable from this "
                     "export and are zero-filled.",
+        # 396 MB, so it cannot be committed. Never substitute the synthetic
+        # sample here: this model windows by flow count and carries norm stats
+        # from the real capture.
+        fallback_to_sample=False,
+        obtain="Download CIC-IDS2017 into data/raw/, then: "
+               "python -m netforecast.real_data_adapter --raw-dir data/raw "
+               "--out data/cicids2017_processed.csv --window-flow-count 200",
     ),
 }
 
@@ -74,9 +91,13 @@ DEFAULT_DATASET = "synthetic"
 
 
 def find_sample_csv(spec: DatasetSpec) -> Optional[Path]:
-    """The dataset's own sample, or the committed fallback sample if absent."""
+    """The dataset's own capture, or the committed sample when that is a valid
+    stand-in for it. Returns None rather than substituting an incompatible
+    capture -- a silently wrong answer is worse than a missing dataset."""
     if spec.sample_csv.exists():
         return spec.sample_csv
+    if not spec.fallback_to_sample:
+        return None
     fallback = ROOT / "data" / "sample_flows.csv"
     return fallback if fallback.exists() else None
 

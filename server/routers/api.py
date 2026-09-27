@@ -99,15 +99,24 @@ def datasets(request: Request):
                 cfg = store.predictor(spec.model_dir).cfg
             except Exception:
                 cfg = {}
+        sample = find_sample_csv(spec)
+        reason = None
+        if not spec.model_ready:
+            reason = f"no trained checkpoint in {spec.model_dir.name}/"
+        elif sample is None:
+            reason = (f"capture {spec.sample_csv.name} is not present "
+                      "(too large to ship in the repository)")
         out.append(DatasetInfo(
             id=spec.id, label=spec.label, description=spec.description,
-            available=spec.model_ready and find_sample_csv(spec) is not None,
+            available=spec.model_ready and sample is not None,
             model_ready=spec.model_ready,
-            sample_present=find_sample_csv(spec) is not None,
+            sample_present=sample is not None,
             window_unit=spec.window_unit,
             window_seconds=cfg.get("window_seconds"),
             context_len=cfg.get("context_len"),
             horizon_k=cfg.get("horizon_k"),
+            unavailable_reason=reason,
+            obtain=spec.obtain or None,
         ))
     return out
 
@@ -151,8 +160,11 @@ def create_session(request: Request, body: CreateSessionRequest, bg: BackgroundT
     if csv_path is None:
         raise HTTPException(
             409,
-            f"no sample capture for '{spec.id}'. Generate one with "
-            f"python -m netforecast.simulate_traffic, or upload a CSV.")
+            f"the capture for '{spec.id}' ({spec.sample_csv.name}) is not present. "
+            + (f"To obtain it: {spec.obtain}. " if spec.obtain else "")
+            + "It is deliberately not substituted with the synthetic sample, which "
+              f"this model would score with the wrong windowing ({spec.window_unit}) "
+              "and normalization statistics.")
     store = _store(request)
     session = store.create(spec, source=csv_path.name)
     bg.add_task(_load_task, store, session, spec, csv_path, body.nrows)

@@ -195,3 +195,41 @@ def test_replay_websocket(client, session):
 def test_replay_websocket_rejects_unknown_session(client):
     with client.websocket_connect("/ws/replay/deadbeef") as ws:
         assert ws.receive_json()["type"] == "error"
+
+
+# ------------------------------------------------- dataset / capture pairing
+
+def test_real_dataset_never_falls_back_to_the_synthetic_sample():
+    """A missing real capture must read as unavailable, not be substituted.
+
+    The committed sample is synthetic: 30-second windows, synthetic-schema IPs.
+    The CIC-IDS2017 model windows by *flow count* and carries normalization
+    statistics from the real capture. Scoring one with the other produces
+    confident nonsense, so `find_sample_csv` must return None instead -- a
+    visibly missing dataset beats a silently wrong one.
+    """
+    from dataclasses import replace
+
+    from server.config import DATASETS, find_sample_csv
+
+    real = DATASETS["cicids2017"]
+    assert real.fallback_to_sample is False
+    assert real.obtain, "an unavailable dataset must say how to obtain it"
+
+    # Simulate a fresh clone, where only data/sample_flows.csv is present.
+    missing = replace(real, sample_csv=real.sample_csv.with_name("__absent__.csv"))
+    assert find_sample_csv(missing) is None
+
+    # The synthetic dataset may fall back -- the sample *is* synthetic.
+    syn = DATASETS["synthetic"]
+    assert syn.fallback_to_sample is True
+    gone = replace(syn, sample_csv=syn.sample_csv.with_name("__absent__.csv"))
+    fallback = find_sample_csv(gone)
+    assert fallback is None or fallback.name == "sample_flows.csv"
+
+
+def test_unavailable_dataset_is_explained(client):
+    """/api/datasets must say why a dataset cannot be used, and how to fix it."""
+    for d in client.get("/api/datasets").json():
+        if not d["available"]:
+            assert d["unavailable_reason"], f"{d['id']} is unavailable with no reason given"

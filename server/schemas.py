@@ -17,6 +17,8 @@ class DatasetInfo(BaseModel):
     window_seconds: Optional[int] = None
     context_len: Optional[int] = None
     horizon_k: Optional[int] = None
+    unavailable_reason: Optional[str] = None
+    obtain: Optional[str] = None
 
 
 class HealthResponse(BaseModel):
