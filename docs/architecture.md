@@ -268,6 +268,19 @@ PCAPs) join packet-level fields via **Scapy**/**PyShark** on the flow
   renders correctly on an air-gapped network — a CDN `<script>` tag would
   have quietly broken exactly the deployment this is pitched for.
 
+### Measured latency (CPU, single process)
+
+| Operation | Median | p99 |
+|---|---|---|
+| Featurize 5,000 flows | 18.8 ms | – |
+| Single forward pass | 3.01 ms | 4.34 ms |
+| 5-step rollout | 9.12 ms | 17.84 ms |
+| Rollout + explainability | 9.08 ms | – |
+
+Inference is nowhere near the bottleneck: a window's worth of featurization costs
+more than the model does. That is what makes an on-prem CPU-only deployment
+realistic, and it is why no GPU appears anywhere in the requirements.
+
 ### Service architecture
 
 ```

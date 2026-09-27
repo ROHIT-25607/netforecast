@@ -116,124 +116,14 @@ See [docs/architecture.md](docs/architecture.md) for the full write-up
 — state representation, benchmark methodology and results, dataset
 adapter details, and honesty/scope notes.
 
-## 7. Results
+**Headline results** (real CIC-IDS2017 traffic, 1,839 held-out windows):
+F1 **0.843**, ROC-AUC **0.940**, PR-AUC **0.907**; the 5-step autoregressive
+rollout retains **92%** of single-shot F1 while running four of its five steps
+on self-generated state. Full tables, ROC/PR curves, per-horizon forecast
+quality, lead time and latency are in
+[reports/benchmark_cicids2017.md](reports/benchmark_cicids2017.md).
 
-Full reports, including ROC/PR curves, live in [`reports/`](reports/). Every number
-below comes from the committed checkpoints on a held-out split; reproduce with
-`make eval` / `make eval-real`.
-
-### Detection — CIC-IDS2017 (1,839 held-out windows, 32.3% positive)
-
-| Model | Precision | Recall | F1 | FPR | ROC-AUC | PR-AUC |
-|---|---|---|---|---|---|---|
-| Logistic Regression | 0.311 | 0.783 | 0.445 | 0.829 | 0.452 | 0.413 |
-| Random Forest | 0.950 | 0.665 | 0.782 | **0.017** | **0.948** | 0.905 |
-| **LSTM World Model** | 0.894 | 0.798 | **0.843** | 0.045 | 0.940 | **0.907** |
-
-The world model gives the best F1 (**+0.061** over the strongest baseline) by being
-better balanced: the random forest is highly precise but misses 33% of attack
-windows, which in a SOC is the expensive kind of error. The two are now level on
-ranking quality (ROC-AUC 0.940 vs 0.948, PR-AUC 0.907 vs 0.905).
-
-### Forecast quality vs horizon
-
-Step *s* is the **autoregressive rollout**: the model has fed its own predicted
-state back in *s−1* times and has seen no new traffic.
-
-| Horizon | t+1 | t+2 | t+3 | t+4 | t+5 |
-|---|---|---|---|---|---|
-| F1 | 0.849 | 0.841 | 0.815 | 0.794 | 0.775 |
-| ROC-AUC | 0.953 | 0.946 | 0.936 | 0.929 | 0.923 |
-
-Predicting the same label from a single forward pass over *observed* traffic scores
-F1 0.843. Running 4 of its 5 steps on self-generated state, the rollout retains
-**92%** of that. A model that had merely memorised a current-window mapping would
-collapse once fed its own output — this is the evidence the transition function is
-real.
-
-### Lead time
-
-Of 40 attack-episode onsets assessable in the held-out period, the model was already
-above threshold **before the first malicious flow was recorded** in 18 (**45%**),
-with a median warning of 1 window (200 flows) and a maximum of 3 windows (600 flows).
-
-### Latency (CPU, single process)
-
-| Operation | Median |
-|---|---|
-| Featurize 5,000 flows | 18.8 ms |
-| Single forward pass | 3.01 ms |
-| 5-step rollout | 9.12 ms |
-| Rollout + explainability | 9.08 ms |
-
-No GPU and no network call anywhere in the inference path.
-
-### Training and model selection
-
-The CIC-IDS2017 checkpoint was retrained for the final round. What actually moved the
-numbers was ordinary training hygiene rather than anything exotic:
-
-| Change | Effect |
-|---|---|
-| `ReduceLROnPlateau` + gradient clipping + early stopping | removed the val-loss spikes (0.82 → 2.10 mid-run) visible in the old `history.json` |
-| Restore **best-validation** weights before saving | the previous run wrote `config.json`/`history.json` from the last epoch |
-| Corrected `day_aware_split` window indices | see the caveat below |
-
-Two changes that sounded promising were **measured and rejected**:
-
-- **Re-weighting the loss.** At the old weights the 33-dim dynamics MSE was ~70% of
-  total loss and the infiltration head — the one every metric scores — only 8–12%.
-  Up-weighting the BCE term made held-out PR-AUC *worse* (0.839 vs 0.907).
-- **Multi-step (autoregressive) dynamics loss.** Intended to attack rollout drift
-  directly; it came out level-to-slightly-worse than one-step training.
-
-Both remain available behind `--w-dyn` / `--w-inf` / `--rollout-steps`, defaulted to
-the configuration that actually won. Every candidate was selected on **validation**
-and only then scored on test, and a candidate was promoted only if it beat the
-incumbent on *every* held-out metric — which is why the synthetic checkpoint was
-left alone. `tools/eval_seeds.py` and `tools/ab_compare.py` reproduce the comparison.
-
-Against the previous checkpoint, on the identical held-out split:
-
-| Metric | before | after |
-|---|---|---|
-| F1 | 0.832 | **0.843** |
-| ROC-AUC | 0.898 | **0.940** |
-| PR-AUC | 0.881 | **0.907** |
-| 5-step rollout F1 | 0.670 | **0.775** |
-| Rollout retention | 81% | **92%** |
-
-### Honest caveats
-
-These are stated up front because a reviewer will find them anyway, and they bound
-what the numbers mean:
-
-- **On synthetic data the world model does *not* beat a random forest** (F1 0.938 vs
-  0.941). The generator is close to trivially separable, so the baselines saturate.
-  The CIC-IDS2017 comparison is the meaningful one. Retraining the synthetic model
-  with the improved recipe made it *worse* on every held-out metric, so the original
-  checkpoint is what ships — see [Training and model selection](#training-and-model-selection).
-- **The real-data checkpoint is the validation-selected seed of three.** Across
-  seeds, held-out PR-AUC ranged 0.879–0.907. The shipped model is the best on
-  *validation*; its test numbers are reported above and are reproducible, but a
-  retrain from a different seed would not necessarily land in the same place.
-- **~9 of the 33 state features are constant zeros on CIC-IDS2017.** TTL variance,
-  retransmission and fragmentation are not recoverable from that export, and its
-  adapter uses placeholder IPs. Saliency on the real model therefore ranks a narrower
-  feature set than the synthetic model does.
-- **`window_seconds: 200` for the real model counts flows, not seconds.** CIC-IDS2017
-  has no usable wall clock, so the adapter uses row order. The API reports
-  `window_unit` explicitly so nothing in the UI claims otherwise.
-- **The Exfiltration stage has no training examples on CIC-IDS2017**, and DoS/DDoS
-  rows are dropped by the adapter. The stage head can still emit Exfiltration; on the
-  real checkpoint that output is not evidence-backed.
-- **Best-F1 thresholds in the reports are selected on the test split**, so treat them
-  as an upper bound; a deployment would tune on validation.
-- The real-data split is `day_aware_split` (chronological *within* each capture day,
-  then unioned), not one strictly-future cut — otherwise whole attack families would
-  appear only in test. See [docs/architecture.md](docs/architecture.md) §6.
-
-## 8. Repository Structure
+## 7. Repository Structure
 
 ```text
 netforecast/
@@ -275,18 +165,18 @@ netforecast/
 | Final PPT / presentation | `submission/` |
 | Demo video link | `submission/DEMO.md` |
 
-## 9. Final Presentation
+## 8. Final Presentation
 
 See [submission/PRESENTATION.md](submission/PRESENTATION.md) for the
 SIH presentation.
 
-## 10. Demo Video
+## 9. Demo Video
 
 [Watch on Google Drive](https://drive.google.com/drive/folders/14LbfeSOyGeUZZ3lBmPQWUZCFh_gERLxc?usp=sharing)
 
 See [submission/DEMO.md](submission/DEMO.md) for the link.
 
-## 11. Screenshots / Prototype Photos
+## 10. Screenshots / Prototype Photos
 
 ### The dashboard
 
@@ -324,7 +214,7 @@ The remaining screens (traffic overview, probability timeline, K-step rollout
 table, attention weights, flow drill-down, MITRE reference) are in
 [assets/screenshots/](assets/screenshots/).
 
-## 12. Installation
+## 11. Installation
 
 ```bash
 git clone https://github.com/ROHIT-25607/netforecast.git
@@ -352,7 +242,7 @@ posture the on-prem deployment assumes. The large CIC-IDS2017 capture is *not*
 baked in (396 MB); mount it with the `./data` volume in `docker-compose.yml` to
 score it inside the container.
 
-## 13. Run
+## 12. Run
 
 ### Start the service
 
@@ -419,7 +309,7 @@ make test     # pytest
 make lint     # ruff
 ```
 
-## 14. Future Scope
+## 13. Future Scope
 
 - Per-host graph state with a GNN encoder for larger enterprise topologies.
 - Kafka / NetFlow collector adapters in front of the existing `/api/ingest`
