@@ -10,17 +10,14 @@
 
 ### Team
 
-<!-- TODO(before submission): replace these placeholder rows with the real team.
-     The SIH checklist requires team members and roles to be named. -->
-
 | Name | Role | Responsibilities |
 |---|---|---|
-| _TBD_ | Team lead / ML | World model architecture, training, evaluation |
-| _TBD_ | Data engineering | Feature pipeline, CIC-IDS2017 adapter, synthetic generator |
-| _TBD_ | Backend | FastAPI service, WebSocket streaming, live ingest |
-| _TBD_ | Frontend | SOC dashboard, visualization |
-| _TBD_ | Security research | MITRE ATT&CK mapping, threat-model validation |
-| _TBD_ | Documentation / QA | Benchmarks, tests, submission materials |
+| Praneel Maumdar | Team lead / ML | World model architecture, training, evaluation |
+| Rohit Kumar Singh | Backend | FastAPI service, WebSocket streaming, live ingest |
+| Amit Patel | Data engineering | Feature pipeline, CIC-IDS2017 adapter, synthetic generator |
+| Himanshu Yadav | Frontend | SOC dashboard, visualization |
+| Keshav Mittal | Security research | MITRE ATT&CK mapping, threat-model validation |
+| Nikita Gupta | Documentation / QA | Benchmarks, tests, submission materials |
 
 ## 2. Problem Statement
 
